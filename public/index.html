@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Redirecting...</title>
+    <script>
+      window.onload = function () {
+        const params = new URLSearchParams(window.location.search);
+        const oobCode = params.get("oobCode");
+        const mode = params.get("mode");
+
+        if (oobCode && mode === "signIn") {
+          // เปลี่ยน "myapp://" ให้ตรงกับ deep link ของคุณ
+          window.location.href = `myapp://reset-password?oobCode=${oobCode}`;
+        } else {
+          document.body.innerText = "Invalid or expired reset link.";
+        }
+      };
+    </script>
+  </head>
+  <body>
+    Redirecting to app...
+  </body>
+</html>

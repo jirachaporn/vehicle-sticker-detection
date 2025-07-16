@@ -1,0 +1,146 @@
+import bcrypt
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from pymongo import MongoClient
+from bson.objectid import ObjectId
+import os
+from dotenv import load_dotenv
+import random
+
+load_dotenv()
+
+Mongo_URL = os.getenv('Mongo_URL')
+app = Flask(__name__)
+CORS(app)
+
+client = MongoClient(Mongo_URL)
+db = client["Test_1"]
+users_collection = db["user"]
+location_collection = db["location"]
+
+AVAILABLE_COLORS = [
+    "#4285F4",  # Blue
+    "#DB4437",  # Red
+    "#F4B400",  # Yellow
+    "#0F9D58",  # Green
+    "#AB47BC",  # Purple
+]
+
+def get_random_color():
+    return random.choice(AVAILABLE_COLORS)
+
+# สมัคร
+@app.route("/signup", methods=["POST"])
+def signup():
+    data = request.json
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+
+    if users_collection.find_one({"email": email}):
+        return jsonify({"message": "Email already exists"}), 400
+
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+    users_collection.insert_one({
+        "username": username,
+        "email": email,
+        "password": hashed_password.decode('utf-8'),
+        "color": get_random_color()
+    })
+
+    return jsonify({"message": "User registered successfully"}), 201
+
+# เข้าสู่ระบบ
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.json
+    input_value = data.get("input")  
+    password = data.get("password")
+
+    user = users_collection.find_one({
+        "$or": [
+            {"email": input_value},
+            {"username": input_value}
+        ]
+    })
+
+    if not user:
+        return jsonify({"message": "User not found"}), 401
+
+    if bcrypt.checkpw(password.encode('utf-8'), user["password"].encode('utf-8')):
+        return jsonify({
+            "username": user["username"],
+            "email": user["email"],
+            "color": user["color"]
+        }), 200
+    else:
+        return jsonify({"message": "Incorrect password"}), 401
+
+# ดึงข้อมูลผู้ใช้
+@app.route("/get_user", methods=["POST"])
+def get_user():
+    data = request.json
+    email = data.get("email")
+
+    user = users_collection.find_one({"email": email})
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    return jsonify({
+        "username": user.get("username"),
+        "email": user.get("email"),
+        "color": user.get("color")
+    }), 200
+
+# ดึงข้อมูลสถานที่
+@app.route('/locations', methods=['GET'])
+def get_locations():
+    user_email = request.args.get('user')
+
+    if not user_email:
+        return jsonify({"error": "Missing 'user' query parameter"}), 400
+
+    query = {
+        "$or": [
+            {"owner_email": user_email},
+            {"shared_with": {"$elemMatch": {"email": user_email}}}
+        ]
+    }
+
+    locations = list(location_collection.find(query))
+
+    for loc in locations:
+        loc["_id"] = str(loc["_id"])
+
+    return jsonify(locations)
+
+# บันทึกข้อมูลสถานที่
+@app.route('/save_locations', methods=['POST'])
+def add_location():
+    data = request.json
+    name = data.get('name')
+    address = data.get('address')
+    color = data.get('color')
+    description = data.get('description')
+    owner_email = data.get('owner_email')
+    shared_with = data.get('shared_with', [])
+
+    new_location = {
+        "name": name,
+        "address": address,
+        "color": color,
+        "description": description,
+        "owner_email": owner_email,
+        "shared_with": shared_with
+    }
+
+    result = location_collection.insert_one(new_location)
+    new_location["_id"] = str(result.inserted_id)
+
+    return jsonify(new_location), 201
+
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
