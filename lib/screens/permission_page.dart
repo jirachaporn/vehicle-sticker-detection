@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
-import '../models/user.dart';
+import '../models/permission.dart';
 import '../widgets/add_user_dialog.dart';
 import '../widgets/permission_dialog.dart';
 

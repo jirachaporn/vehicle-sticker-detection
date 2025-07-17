@@ -62,8 +62,10 @@ class _LocationCardState extends State<LocationCard> {
                             width: iconContainerSize,
                             height: iconContainerSize,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(
-                                isHovered ? 0.35 : 0.25,
+                              color: Colors.white.withAlpha(
+                                isHovered
+                                    ? (255 * 0.35).round()
+                                    : (255 * 0.25).round(),
                               ),
                               borderRadius: BorderRadius.circular(12),
                             ),

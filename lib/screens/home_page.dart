@@ -61,7 +61,7 @@ class HomePage extends StatelessWidget {
                   onLocationTap: (location) {
                     appState.selectLocation(location);
                     // appState.setView(AppView.overview);
-                    appState.setView(AppView.uploadStickers);
+                    appState.setView(AppView.camera);
 
                   },
                   cardBuilder: (location, onTap) =>

@@ -45,38 +45,37 @@ class OverviewPage extends StatelessWidget {
   };
 
   @override
-Widget build(BuildContext context) {
-  return Padding(
-    padding: const EdgeInsets.all(30),
-    child: SingleChildScrollView( 
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Row(
-            children: const [
-              Text(
-                'Overview',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(30),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
+              children: const [
+                Text(
+                  'Overview',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
                 ),
-              ),
-              Spacer(),
-              SizedBox(width: 56, height: 56),
-            ],
-          ),
-          _buildOverviewRow(),
-          const SizedBox(height: 16),
-          _buildChartsRow(),
-          const SizedBox(height: 16),
-          _buildBottomChartsRow(),
-        ],
+                Spacer(),
+                SizedBox(width: 56, height: 56),
+              ],
+            ),
+            _buildOverviewRow(),
+            const SizedBox(height: 16),
+            _buildChartsRow(),
+            const SizedBox(height: 16),
+            _buildBottomChartsRow(),
+          ],
+        ),
       ),
-    ),
-  );
-}
-
+    );
+  }
 
   Widget _buildOverviewRow() {
     return Wrap(

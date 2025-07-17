@@ -8,6 +8,7 @@ import 'home_page.dart';
 import 'permission_page.dart';
 import 'overview_page.dart';
 import 'upload_screen.dart';
+import 'camera_page.dart';
 
 class MainScreen extends StatefulWidget {
   final String username;
@@ -66,7 +67,6 @@ void initState() {
                       switch (appState.currentView) {
                         case AppView.home:
                           return const HomePage();
-
                         case AppView.overview:
                           return OverviewPage();
                         case AppView.permission:
@@ -76,19 +76,13 @@ void initState() {
                             title: 'Notification',
                             icon: Icons.notifications,
                           );
-
                         case AppView.camera:
-                          return const GenericScreen(
-                            title: 'Camera',
-                            icon: Icons.camera_alt,
-                          );
-
+                          return const CameraPage();
                         case AppView.table:
                           return const GenericScreen(
                             title: 'Table',
                             icon: Icons.table_chart,
                           );
-
                         case AppView.uploadStickers:
                           return  UploadScreen();
                       }

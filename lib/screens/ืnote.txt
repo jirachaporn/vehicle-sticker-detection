@@ -1,7 +1,0 @@
-Jp123
-pumjirach@gmail.com 
-Mad.7cute
-
-flutter run -d chrome --web-port=5000
-
-Mongo_URL=mongodb+srv://pumjirach:1769900685735@cluster0.buuiymh.mongodb.net/
