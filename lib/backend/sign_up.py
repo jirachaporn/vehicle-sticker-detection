@@ -1,18 +1,11 @@
-import bcrypt
-from flask import Flask, request, jsonify
-from flask import Response
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from pymongo import MongoClient
 from bson.objectid import ObjectId
-import os
 from dotenv import load_dotenv
-import random
-import cv2
+import random, cv2, os, bcrypt
 import threading
 import time
-import numpy as np
-from datetime import datetime
-import platform
 
 load_dotenv()
 
@@ -24,188 +17,40 @@ client = MongoClient(Mongo_URL)
 db = client["Test_1"]
 users_collection = db["user"]
 location_collection = db["location"]
-cameras_collection = db["cameras"]
-detection_logs_collection = db["detection_logs"]
+
+# เก็บ camera streams และ locks
+camera_streams = {}
+camera_locks = {}
 
 AVAILABLE_COLORS = [
-    "#4285F4",  # Blue
-    "#DB4437",  # Red
-    "#F4B400",  # Yellow
-    "#0F9D58",  # Green
-    "#AB47BC",  # Purple
+    "#4285F4", "#DB4437", "#F4B400", "#0F9D58", "#AB47BC"
 ]
 
 def get_random_color():
     return random.choice(AVAILABLE_COLORS)
 
-# ===== Camera Management System =====
-class CameraManager:
-    def __init__(self):
-        self.cameras = {}
-        self.active_streams = {}
-        self.detection_results = {}
-        self.lock = threading.Lock()
-        
-    def detect_cameras(self):
-        """ตรวจจับกล้องที่เชื่อมต่ออยู่"""
-        cameras = []
-        
-        if platform.system() == "Windows":
-            # สำหรับ Windows
-            for i in range(10):  # ตรวจสอบ 10 ช่องแรก
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    ret, frame = cap.read()
-                    if ret:
-                        cameras.append({
-                            'id': i,
-                            'name': f'Camera {i}',
-                            'device_path': f'/dev/video{i}',
-                            'is_active': True
-                        })
-                    cap.release()
-        else:
-            # สำหรับ Linux/Mac
-            for i in range(10):
-                cap = cv2.VideoCapture(i)
-                if cap.isOpened():
-                    ret, frame = cap.read()
-                    if ret:
-                        cameras.append({
-                            'id': i,
-                            'name': f'Camera {i}',
-                            'device_path': f'/dev/video{i}',
-                            'is_active': True
-                        })
-                    cap.release()
-        
-        with self.lock:
-            self.cameras = {cam['id']: cam for cam in cameras}
-        
-        return cameras
-    
-    def start_camera_stream(self, camera_id):
-        """เริ่ม stream กล้อง"""
-        if camera_id in self.active_streams:
-            return True
+# ฟังก์ชันสำหรับทดสอบกล้อง
+def test_camera(camera_id, backend=cv2.CAP_ANY):
+    """ทดสอบว่ากล้องสามารถเปิดและอ่านเฟรมได้หรือไม่"""
+    try:
+        cap = cv2.VideoCapture(camera_id, backend)
+        if cap.isOpened():
+            # ตั้งค่า resolution ให้เล็กลงเพื่อประสิทธิภาพที่ดีขึ้น
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_FPS, 15)
             
-        cap = cv2.VideoCapture(camera_id)
-        if not cap.isOpened():
-            return False
-            
-        # ตั้งค่าความละเอียด
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        cap.set(cv2.CAP_PROP_FPS, 30)
-        
-        with self.lock:
-            self.active_streams[camera_id] = cap
-            self.detection_results[camera_id] = []
-        
-        return True
-    
-    def stop_camera_stream(self, camera_id):
-        """หยุด stream กล้อง"""
-        with self.lock:
-            if camera_id in self.active_streams:
-                self.active_streams[camera_id].release()
-                del self.active_streams[camera_id]
-            if camera_id in self.detection_results:
-                del self.detection_results[camera_id]
-    
-    def stop_all_streams(self):
-        """หยุด stream ทุกตัว"""
-        with self.lock:
-            for cap in self.active_streams.values():
-                cap.release()
-            self.active_streams.clear()
-            self.detection_results.clear()
-    
-    def get_frame(self, camera_id):
-        """ดึงเฟรมจากกล้อง"""
-        with self.lock:
-            if camera_id not in self.active_streams:
-                return None
-                
-            cap = self.active_streams[camera_id]
+            # ทดสอบอ่านเฟรม
             ret, frame = cap.read()
-            
-            if not ret:
-                return None
-            
-            # Encode เป็น JPEG
-            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            return buffer.tobytes()
-    
-    def perform_detection(self, camera_id):
-        """ทำการตรวจจับบนเฟรมปัจจุบัน"""
-        with self.lock:
-            if camera_id not in self.active_streams:
-                return []
-                
-            cap = self.active_streams[camera_id]
-            ret, frame = cap.read()
-            
-            if not ret:
-                return []
-        
-        # ตัวอย่างการตรวจจับ (ใช้ mock data)
-        # ในการใช้งานจริงจะใช้ YOLO หรือ model อื่นๆ
-        detections = self._mock_detection(frame)
-        
-        with self.lock:
-            self.detection_results[camera_id] = detections
-        
-        # บันทึกผลการตรวจจับลง database
-        if detections:
-            self._save_detection_logs(camera_id, detections)
-        
-        return detections
-    
-    def _mock_detection(self, frame):
-        """Mock detection สำหรับทดสอบ"""
-        detections = []
-        
-        # สุ่มการตรวจจับ
-        if random.random() > 0.7:  # 30% โอกาสที่จะตรวจพบ
-            num_detections = random.randint(1, 3)
-            
-            for _ in range(num_detections):
-                detection = {
-                    'class_name': random.choice(['license_plate', 'sticker', 'vehicle']),
-                    'confidence': random.uniform(0.7, 0.95),
-                    'bounding_box': {
-                        'x': random.uniform(0.1, 0.6),
-                        'y': random.uniform(0.1, 0.6),
-                        'width': random.uniform(0.1, 0.3),
-                        'height': random.uniform(0.1, 0.3)
-                    },
-                    'timestamp': datetime.now().isoformat()
-                }
-                detections.append(detection)
-        
-        return detections
-    
-    def _save_detection_logs(self, camera_id, detections):
-        """บันทึกผลการตรวจจับลง database"""
-        try:
-            for detection in detections:
-                log_entry = {
-                    'camera_id': camera_id,
-                    'class_name': detection['class_name'],
-                    'confidence': detection['confidence'],
-                    'bounding_box': detection['bounding_box'],
-                    'timestamp': datetime.now(),
-                    'created_at': datetime.now()
-                }
-                detection_logs_collection.insert_one(log_entry)
-        except Exception as e:
-            print(f"Error saving detection logs: {e}")
+            cap.release()
+            return ret and frame is not None
+        return False
+    except Exception as e:
+        print(f"Error testing camera {camera_id}: {e}")
+        return False
 
-# สร้าง instance ของ CameraManager
-camera_manager = CameraManager()
+# -------------------- USER SYSTEM --------------------
 
-# สมัคร
 @app.route("/signup", methods=["POST"])
 def signup():
     data = request.json
@@ -217,7 +62,6 @@ def signup():
         return jsonify({"message": "Email already exists"}), 400
 
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-
     users_collection.insert_one({
         "username": username,
         "email": email,
@@ -227,18 +71,14 @@ def signup():
 
     return jsonify({"message": "User registered successfully"}), 201
 
-# เข้าสู่ระบบ
 @app.route("/login", methods=["POST"])
 def login():
     data = request.json
-    input_value = data.get("input")  
+    input_value = data.get("input")
     password = data.get("password")
 
     user = users_collection.find_one({
-        "$or": [
-            {"email": input_value},
-            {"username": input_value}
-        ]
+        "$or": [{"email": input_value}, {"username": input_value}]
     })
 
     if not user:
@@ -253,7 +93,6 @@ def login():
     else:
         return jsonify({"message": "Incorrect password"}), 401
 
-# ดึงข้อมูลผู้ใช้
 @app.route("/get_user", methods=["POST"])
 def get_user():
     data = request.json
@@ -269,11 +108,11 @@ def get_user():
         "color": user.get("color")
     }), 200
 
-# ดึงข้อมูลสถานที่
+# -------------------- LOCATION SYSTEM --------------------
+
 @app.route('/locations', methods=['GET'])
 def get_locations():
     user_email = request.args.get('user')
-
     if not user_email:
         return jsonify({"error": "Missing 'user' query parameter"}), 400
 
@@ -285,228 +124,246 @@ def get_locations():
     }
 
     locations = list(location_collection.find(query))
-
     for loc in locations:
         loc["_id"] = str(loc["_id"])
 
     return jsonify(locations)
 
-# บันทึกข้อมูลสถานที่
 @app.route('/save_locations', methods=['POST'])
 def add_location():
     data = request.json
-    name = data.get('name')
-    address = data.get('address')
-    color = data.get('color')
-    description = data.get('description')
-    owner_email = data.get('owner_email')
-    shared_with = data.get('shared_with', [])
-
     new_location = {
-        "name": name,
-        "address": address,
-        "color": color,
-        "description": description,
-        "owner_email": owner_email,
-        "shared_with": shared_with
+        "name": data.get('name'),
+        "address": data.get('address'),
+        "color": data.get('color'),
+        "description": data.get('description'),
+        "owner_email": data.get('owner_email'),
+        "shared_with": data.get('shared_with', [])
     }
 
     result = location_collection.insert_one(new_location)
     new_location["_id"] = str(result.inserted_id)
-
     return jsonify(new_location), 201
 
+# # -------------------- CAMERA STREAMING --------------------
 
-# ===== Camera API Endpoints =====
-
-@app.route('/api/cameras/list', methods=['GET'])
-def get_cameras():
-    """ดึงรายการกล้องที่มีอยู่"""
-    try:
-        cameras = camera_manager.detect_cameras()
-        return jsonify({
-            'success': True,
-            'cameras': cameras,
-            'count': len(cameras)
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/cameras/<int:camera_id>/start', methods=['POST'])
-def start_camera(camera_id):
-    """เริ่ม stream กล้อง"""
-    try:
-        success = camera_manager.start_camera_stream(camera_id)
-        if success:
-            return jsonify({
-                'success': True,
-                'message': f'Camera {camera_id} started'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': f'Failed to start camera {camera_id}'
-            }), 400
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/cameras/<int:camera_id>/stop', methods=['POST'])
-def stop_camera(camera_id):
-    """หยุด stream กล้อง"""
-    try:
-        camera_manager.stop_camera_stream(camera_id)
-        return jsonify({
-            'success': True,
-            'message': f'Camera {camera_id} stopped'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/cameras/stop_all', methods=['POST'])
-def stop_all_cameras():
-    """หยุด stream ทุกตัว"""
-    try:
-        camera_manager.stop_all_streams()
-        return jsonify({
-            'success': True,
-            'message': 'All cameras stopped'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/cameras/<int:camera_id>/frame', methods=['GET'])
-def get_camera_frame(camera_id):
-    """ดึงเฟรมจากกล้อง"""
-    try:
-        frame_data = camera_manager.get_frame(camera_id)
-        if frame_data:
-            return Response(
-                frame_data,
-                mimetype='image/jpeg',
-                headers={'Cache-Control': 'no-cache, no-store, must-revalidate'}
-            )
-        else:
-            return jsonify({
-                'success': False,
-                'error': f'No frame available from camera {camera_id}'
-            }), 404
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/detection/<int:camera_id>/detect', methods=['GET'])
-def detect_objects(camera_id):
-    """ทำการตรวจจับบนกล้อง"""
-    try:
-        detections = camera_manager.perform_detection(camera_id)
-        return jsonify({
-            'success': True,
-            'camera_id': camera_id,
-            'detections': detections,
-            'count': len(detections),
-            'timestamp': datetime.now().isoformat()
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-@app.route('/api/cameras/status', methods=['GET'])
-def get_camera_status():
-    """ดึงสถานะของระบบกล้อง"""
-    try:
-        with camera_manager.lock:
-            active_cameras = list(camera_manager.active_streams.keys())
-            total_detections = sum(
-                len(detections) for detections in camera_manager.detection_results.values()
-            )
+# @app.route('/api/cameras/list', methods=['GET'])
+# def list_available_cameras():
+#     print("Scanning for available cameras...")
+#     available = []
+    
+#     # ลอง backends ต่างๆ
+#     backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
+    
+#     for camera_id in range(10):  # ตรวจสอบกล้อง 0-9
+#         camera_found = False
         
-        return jsonify({
-            'success': True,
-            'status': {
-                'total_cameras': len(camera_manager.cameras),
-                'active_cameras': len(active_cameras),
-                'active_camera_ids': active_cameras,
-                'total_detections': total_detections,
-                'timestamp': datetime.now().isoformat()
-            }
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+#         for backend in backends:
+#             if test_camera(camera_id, backend):
+#                 available.append({
+#                     "id": camera_id, 
+#                     "name": f"Camera {camera_id}",
+#                     "backend": backend
+#                 })
+#                 print(f"Found camera {camera_id} with backend {backend}")
+#                 camera_found = True
+#                 break
+        
+#         if not camera_found:
+#             # หาก backends ทั้งหมดไม่ได้ผล หยุดการค้นหา
+#             if camera_id > 2:  # อนุญาตให้หาไม่เจอได้ 3 ครั้งแรก
+#                 break
+    
+#     print(f"Total cameras found: {len(available)}")
+    
+#     # หากไม่พบกล้องใดเลย สร้าง virtual camera สำหรับทดสอบ
+#     if not available:
+#         available.append({
+#             "id": 999,
+#             "name": "Virtual Camera (Test)",
+#             "backend": "virtual"
+#         })
+    
+#     return jsonify(available)
 
-@app.route('/api/detection/logs', methods=['GET'])
-def get_detection_logs():
-    """ดึงประวัติการตรวจจับ"""
-    try:
-        # ดึงข้อมูล 100 รายการล่าสุด
-        logs = list(detection_logs_collection.find().sort('timestamp', -1).limit(100))
-        
-        # แปลง ObjectId เป็น string
-        for log in logs:
-            log['_id'] = str(log['_id'])
-            if 'timestamp' in log:
-                log['timestamp'] = log['timestamp'].isoformat()
-            if 'created_at' in log:
-                log['created_at'] = log['created_at'].isoformat()
-        
-        return jsonify({
-            'success': True,
-            'logs': logs,
-            'count': len(logs)
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+# @app.route('/api/cameras/<int:camera_id>/start', methods=['POST'])
+# def start_camera(camera_id):
+#     print(f"Starting camera {camera_id}...")
+    
+#     # ถ้า camera กำลังทำงานอยู่แล้ว
+#     if camera_id in camera_streams and camera_streams[camera_id].get('cap') and camera_streams[camera_id]['cap'].isOpened():
+#         return jsonify({"success": True, "message": "Camera already started"}), 200
+
+#     # สร้าง lock สำหรับ camera นี้
+#     if camera_id not in camera_locks:
+#         camera_locks[camera_id] = threading.Lock()
+
+#     with camera_locks[camera_id]:
+#         try:
+#             # Virtual camera สำหรับทดสอบ
+#             if camera_id == 999:
+#                 camera_streams[camera_id] = {
+#                     'cap': 'virtual',
+#                     'active': True
+#                 }
+#                 return jsonify({"success": True, "message": "Virtual camera started"}), 200
+
+#             # ลองเปิดกล้องด้วย backend ต่างๆ
+#             backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
+#             cap = None
+            
+#             for backend in backends:
+#                 try:
+#                     temp_cap = cv2.VideoCapture(camera_id, backend)
+#                     if temp_cap.isOpened():
+#                         # ตั้งค่า properties
+#                         temp_cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+#                         temp_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+#                         temp_cap.set(cv2.CAP_PROP_FPS, 15)
+#                         temp_cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        
+#                         # ทดสอบอ่านเฟรม
+#                         ret, frame = temp_cap.read()
+#                         if ret and frame is not None:
+#                             cap = temp_cap
+#                             print(f"Camera {camera_id} opened successfully with backend {backend}")
+#                             break
+#                         else:
+#                             temp_cap.release()
+#                     else:
+#                         if temp_cap:
+#                             temp_cap.release()
+#                 except Exception as e:
+#                     print(f"Failed to open camera {camera_id} with backend {backend}: {e}")
+#                     if temp_cap:
+#                         temp_cap.release()
+
+#             if not cap:
+#                 return jsonify({"success": False, "message": "Unable to open camera"}), 500
+
+#             camera_streams[camera_id] = {
+#                 'cap': cap,
+#                 'active': True
+#             }
+            
+#             return jsonify({"success": True, "message": "Camera started successfully"}), 200
+
+#         except Exception as e:
+#             print(f"Error starting camera {camera_id}: {e}")
+#             return jsonify({"success": False, "message": f"Error: {str(e)}"}), 500
+
+# @app.route('/api/cameras/<int:camera_id>/stop', methods=['POST'])
+# def stop_camera(camera_id):
+#     print(f"Stopping camera {camera_id}...")
+    
+#     if camera_id not in camera_streams:
+#         return jsonify({"success": False, "message": "Camera not running"}), 400
+
+#     if camera_id in camera_locks:
+#         with camera_locks[camera_id]:
+#             stream_info = camera_streams.get(camera_id)
+#             if stream_info:
+#                 if stream_info['cap'] != 'virtual' and hasattr(stream_info['cap'], 'release'):
+#                     stream_info['cap'].release()
+#                 del camera_streams[camera_id]
+#                 return jsonify({"success": True, "message": "Camera stopped"}), 200
+    
+#     return jsonify({"success": False, "message": "Camera not running"}), 400
+
+# @app.route('/api/cameras/<int:camera_id>/status', methods=['GET'])
+# def camera_status(camera_id):
+#     stream_info = camera_streams.get(camera_id)
+#     if not stream_info:
+#         return jsonify({"active": False}), 200
+    
+#     if stream_info['cap'] == 'virtual':
+#         return jsonify({"active": stream_info.get('active', False)}), 200
+    
+#     active = stream_info['cap'] and stream_info['cap'].isOpened()
+#     return jsonify({"active": active}), 200
+
+# def generate_virtual_frame():
+#     """สร้างเฟรมสำหรับ virtual camera"""
+#     import numpy as np
+    
+#     # สร้างภาพสีดำขนาด 640x480
+#     frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    
+#     # เพิ่มข้อความ
+#     font = cv2.FONT_HERSHEY_SIMPLEX
+#     text = f"Virtual Camera - {time.strftime('%H:%M:%S')}"
+#     text_size = cv2.getTextSize(text, font, 1, 2)[0]
+#     text_x = (frame.shape[1] - text_size[0]) // 2
+#     text_y = (frame.shape[0] + text_size[1]) // 2
+    
+#     cv2.putText(frame, text, (text_x, text_y), font, 1, (0, 255, 0), 2)
+    
+#     # เพิ่มเวลาที่มุมขวาบน
+#     time_text = time.strftime('%Y-%m-%d %H:%M:%S')
+#     cv2.putText(frame, time_text, (10, 30), font, 0.7, (255, 255, 255), 2)
+    
+#     return frame
+
+# @app.route('/video/<int:camera_id>')
+# def stream_camera(camera_id):
+#     print(f"Video stream requested for camera {camera_id}")
+    
+#     def generate():
+#         stream_info = camera_streams.get(camera_id)
+#         if not stream_info:
+#             print(f"Camera {camera_id} not found in streams")
+#             return
+
+#         try:
+#             while True:
+#                 if camera_id == 999:  # Virtual camera
+#                     frame = generate_virtual_frame()
+#                     success = True
+#                 else:
+#                     cap = stream_info['cap']
+#                     if not cap or not cap.isOpened():
+#                         print(f"Camera {camera_id} is not opened")
+#                         break
+                    
+#                     success, frame = cap.read()
+                
+#                 if not success:
+#                     print(f"Failed to read frame from camera {camera_id}")
+#                     break
+
+#                 # Encode frame
+#                 ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+#                 if not ret:
+#                     print(f"Failed to encode frame from camera {camera_id}")
+#                     continue
+                
+#                 frame_bytes = buffer.tobytes()
+                
+#                 yield (b'--frame\r\n'
+#                        b'Content-Type: image/jpeg\r\n'
+#                        b'Content-Length: ' + str(len(frame_bytes)).encode() + b'\r\n\r\n' + 
+#                        frame_bytes + b'\r\n')
+                
+#                 # เพิ่ม delay เล็กน้อยเพื่อลด CPU usage
+#                 time.sleep(0.033)  # ~30 FPS
+                
+#         except Exception as e:
+#             print(f"Error in video stream for camera {camera_id}: {e}")
+
+#     return Response(generate(), 
+#                    mimetype='multipart/x-mixed-replace; boundary=frame',
+#                    headers={'Cache-Control': 'no-cache, no-store, must-revalidate',
+#                            'Pragma': 'no-cache',
+#                            'Expires': '0'})
+
+# # Cleanup when shutting down
+# @app.teardown_appcontext
+# def cleanup_cameras(error):
+#     for camera_id, stream_info in camera_streams.items():
+#         if stream_info['cap'] != 'virtual' and hasattr(stream_info['cap'], 'release'):
+#             stream_info['cap'].release()
+
+# --------------------
 
 if __name__ == "__main__":
-    print("🚀 Starting Flask Server with Camera Support...")
-    print("📷 Detecting available cameras...")
-    
-    # ตรวจจับกล้องเมื่อเริ่มต้น
-    try:
-        cameras = camera_manager.detect_cameras()
-        print(f"✅ Found {len(cameras)} camera(s)")
-        
-        for camera in cameras:
-            print(f"   - Camera {camera['id']}: {camera['name']}")
-    except Exception as e:
-        print(f"⚠️  Camera detection error: {e}")
-    
-    print("\n🌐 Server running on http://127.0.0.1:5000")
-    print("📡 Available Endpoints:")
-    print("   User Management:")
-    print("   - POST /signup")
-    print("   - POST /login")
-    print("   - POST /get_user")
-    print("   - GET  /locations")
-    print("   - POST /save_locations")
-    print("   Camera System:")
-    print("   - GET  /api/cameras/list")
-    print("   - POST /api/cameras/<id>/start")
-    print("   - POST /api/cameras/<id>/stop")
-    print("   - GET  /api/cameras/<id>/frame")
-    print("   - GET  /api/detection/<id>/detect")
-    print("   - GET  /api/cameras/status")
-    print("   - GET  /api/detection/logs")
-    
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5000, threaded=True)

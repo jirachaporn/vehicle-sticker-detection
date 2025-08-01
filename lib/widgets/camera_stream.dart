@@ -1,141 +1,184 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
-class CameraStream extends StatelessWidget {
-  final Stream<Uint8List>? stream;
+class CameraStream extends StatefulWidget {
   final bool isStreaming;
+  final String cameraUrl;
 
   const CameraStream({
     super.key,
-    required this.stream,
     required this.isStreaming,
+    required this.cameraUrl,
   });
 
   @override
-  Widget build(BuildContext context) {
-    if (!isStreaming || stream == null) {
-      return Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade200,
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(12),
-            bottomRight: Radius.circular(12),
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.videocam_off,
-              size: 48,
-              color: Colors.grey.shade400,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Camera Offline',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      );
+  State<CameraStream> createState() => _CameraStreamState();
+}
+
+class _CameraStreamState extends State<CameraStream> {
+  String? _currentImageUrl;
+
+  @override
+  void didUpdateWidget(CameraStream oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // อัพเดท URL เมื่อ isStreaming เปลี่ยน
+    if (widget.isStreaming != oldWidget.isStreaming) {
+      if (widget.isStreaming) {
+        _updateImageUrl();
+      } else {
+        _currentImageUrl = null;
+      }
     }
+  }
 
-    return StreamBuilder<Uint8List>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 48,
-                  color: Colors.red.shade400,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Stream Error',
-                  style: TextStyle(
-                    color: Colors.red.shade600,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
+  void _updateImageUrl() {
+    if (widget.isStreaming) {
+      setState(() {
+        _currentImageUrl = '${widget.cameraUrl}?t=${DateTime.now().millisecondsSinceEpoch}';
+      });
+    }
+  }
 
-        if (!snapshot.hasData) {
-          return Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
-              ),
-            ),
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-        }
-
-        return ClipRRect(
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(12),
-            bottomRight: Radius.circular(12),
-          ),
-          child: Image.memory(
-            snapshot.data!,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            gaplessPlayback: true,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: widget.isStreaming && _currentImageUrl != null
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                _currentImageUrl!,
+                key: ValueKey(_currentImageUrl),
+                fit: BoxFit.contain,  // เปลี่ยนจาก cover เป็น contain
                 width: double.infinity,
                 height: double.infinity,
-                color: Colors.grey.shade200,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.broken_image,
-                      size: 48,
-                      color: Colors.grey.shade400,
+                gaplessPlayback: true,
+                headers: {
+                  "Cache-Control": "no-cache, no-store, must-revalidate",
+                  "Pragma": "no-cache",
+                  "Expires": "0",
+                },
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) {
+                    // รีเฟรช URL ทุกๆ 100ms เมื่อโหลดเสร็จ
+                    Future.delayed(const Duration(milliseconds: 100), () {
+                      if (mounted && widget.isStreaming) {
+                        _updateImageUrl();
+                      }
+                    });
+                    return child;
+                  }
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded /
+                                  (loadingProgress.expectedTotalBytes ?? 1)
+                              : null,
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Connecting to camera...',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Image Error',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  print('Image load error: $error');
+                  return _buildErrorState();
+                },
+              ),
+            )
+          : widget.isStreaming
+              ? _buildLoadingState()
+              : _buildOfflineState(),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 8),
+          Text(
+            'Initializing camera...',
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 12,
+            ),
           ),
-        );
-      },
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfflineState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.videocam_off, size: 48, color: Colors.grey.shade400),
+          const SizedBox(height: 8),
+          Text(
+            'Camera Offline',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
+          const SizedBox(height: 8),
+          Text(
+            'Connection Error',
+            style: TextStyle(
+              color: Colors.red.shade600,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Failed to load camera stream',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: () {
+              if (widget.isStreaming) {
+                _updateImageUrl();
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade100,
+              foregroundColor: Colors.red.shade700,
+              minimumSize: const Size(0, 32),
+            ),
+            child: const Text('Retry', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
     );
   }
 }

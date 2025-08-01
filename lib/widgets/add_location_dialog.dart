@@ -61,10 +61,11 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
       if (!mounted) return;
 
       if (response.statusCode == 201) {
-        final responseData = jsonDecode(response.body);
-        final location = Location.fromJson(responseData);
 
-        appState.addLocation(location);
+        // ✅ โหลดข้อมูลใหม่ทั้งหมดจาก backend
+        await appState.loadLocations(appState.loggedInEmail);
+
+        if (!mounted) return;
         Navigator.of(context).pop();
         showSuccessMessage(context, 'Location added successfully!');
       } else {

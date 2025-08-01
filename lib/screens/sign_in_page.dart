@@ -1,17 +1,16 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
-import 'package:myproject/providers/app_state.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:logger/logger.dart';
+
+import '../providers/app_state.dart';
 import '../widgets/background.dart';
-import 'forgot_password_page.dart';
-import 'sign_up_page.dart';
 import '../widgets/fail_snackbar.dart';
 import '../widgets/success_snackbar.dart';
+import 'forgot_password_page.dart';
+import 'sign_up_page.dart';
 import 'main_screen.dart';
-import 'package:logger/logger.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -21,22 +20,21 @@ class SignInPage extends StatefulWidget {
 }
 
 class _SignInPageState extends State<SignInPage> {
-  bool _obscureText = true;
-  bool isHoveringForgot = false;
-  bool isHoveringSingin = false;
-
-  static final Logger _logger = Logger();
   final TextEditingController _usernameOrEmailController =
       TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  bool _obscureText = true;
+  bool isHoveringForgot = false;
+  bool isHoveringSignin = false;
+  bool isLoading = false;
+
+  static final Logger _logger = Logger();
 
   void _togglePasswordVisibility() {
-    setState(() {
-      _obscureText = !_obscureText;
-    });
+    setState(() => _obscureText = !_obscureText);
   }
 
-  showFailMessage(BuildContext context, String errorMessage, dynamic error) {
+  void showFailMessage(String title, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         elevation: 0,
@@ -47,8 +45,8 @@ class _SignInPageState extends State<SignInPage> {
         content: Align(
           alignment: Alignment.topRight,
           child: FailSnackbar(
-            title: errorMessage,
-            message: error,
+            title: title,
+            message: message,
             onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
           ),
         ),
@@ -56,7 +54,7 @@ class _SignInPageState extends State<SignInPage> {
     );
   }
 
-  showSuccessMessage(BuildContext context, String message) {
+  void showSuccessMessage(String message) {
     final overlay = Overlay.of(context);
     late OverlayEntry overlayEntry;
     overlayEntry = OverlayEntry(
@@ -67,49 +65,87 @@ class _SignInPageState extends State<SignInPage> {
           color: Colors.transparent,
           child: SuccessSnackbar(
             message: message,
-            onClose: () {
-              if (overlayEntry.mounted) overlayEntry.remove();
-            },
+            onClose: () => overlayEntry.remove(),
           ),
         ),
       ),
     );
     overlay.insert(overlayEntry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
+    Future.delayed(const Duration(seconds: 3), () {
       if (overlayEntry.mounted) overlayEntry.remove();
     });
   }
 
-  Color parseHexColor(String hexColor) {
-    hexColor = hexColor.replaceAll('#', '');
-    if (hexColor.length == 6) {
-      hexColor = 'FF$hexColor';
-    }
-    return Color(int.parse('0x$hexColor'));
-  }
+  Future<void> handleLogin() async {
+    final supabase = Supabase.instance.client;
+    final input = _usernameOrEmailController.text.trim();
+    final password = _passwordController.text;
 
-  Future<Map<String, dynamic>?> loginWithEmailOrUsername(
-    String input,
-    String password,
-  ) async {
+    if (input.isEmpty || password.isEmpty) {
+      showFailMessage('Error', 'Please fill in all required fields.');
+      return;
+    }
+
+    setState(() => isLoading = true);
+
     try {
-      final response = await http.post(
-        Uri.parse('http://127.0.0.1:5000/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'input': input, 'password': password}),
+      final profile = await supabase
+          .from('users')
+          .select('email, username, color_profile')
+          .or('email.eq.$input,username.eq.$input')
+          .limit(1)
+          .single();
+
+      final email = profile['email'];
+      final username = profile['username'];
+      final color = profile['color_profile'];
+
+      final authRes = await supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data; // ✅ ส่ง map กลับมา
-      } else if (response.statusCode == 401) {
-        return {'error': 'Invalid username or password.'};
-      } else {
-        return {'error': 'Unexpected error. Please try again.'};
+      if (authRes.user == null) {
+        showFailMessage('Login Failed', 'Something is incorrect');
+        return;
       }
+
+      showSuccessMessage('Welcome $username!');
+      if (!mounted) return;
+      context.read<AppState>().setLoggedInEmail(email);
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              MainScreen(username: username, email: email, colorHex: color),
+        ),
+      );
     } catch (e) {
-      _logger.e('❌ Login error: $e');
-      return {'error': 'Connection error. Please check your server.'};
+      _logger.e('Login error: $e');
+      if (e.toString().contains('invalid')) {
+        showFailMessage(
+          'Invalid Login',
+          'The username or password you entered is incorrect.',
+        );
+      } else if (e.toString().contains('401')) {
+        showFailMessage(
+          'Unauthorized',
+          'Please check your credentials and try again.',
+        );
+      } else if (e.toString().contains('404')) {
+        showFailMessage(
+          'User Not Found',
+          'No account found with the entered email or username.',
+        );
+      } else {
+        showFailMessage(
+          'Unexpected Error',
+          'Something went wrong. Please try again later.',
+        );
+      }
+    } finally {
+      setState(() => isLoading = false);
     }
   }
 
@@ -144,7 +180,7 @@ class _SignInPageState extends State<SignInPage> {
                     style: GoogleFonts.roboto(
                       fontSize: 40,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B3BA7),
+                      color: const Color(0xFF1B3BA7),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -204,24 +240,12 @@ class _SignInPageState extends State<SignInPage> {
                         onEnter: (_) => setState(() => isHoveringForgot = true),
                         onExit: (_) => setState(() => isHoveringForgot = false),
                         child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              PageRouteBuilder(
-                                transitionDuration: const Duration(
-                                  milliseconds: 100,
-                                ),
-                                pageBuilder: (_, __, ___) =>
-                                    const ForgotPasswordPage(),
-                                transitionsBuilder: (_, animation, __, child) {
-                                  return FadeTransition(
-                                    opacity: animation,
-                                    child: child,
-                                  );
-                                },
-                              ),
-                            );
-                          },
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ForgotPasswordPage(),
+                            ),
+                          ),
                           child: Text(
                             'Forgot password?',
                             style: TextStyle(
@@ -229,74 +253,33 @@ class _SignInPageState extends State<SignInPage> {
                               color: isHoveringForgot
                                   ? const Color(0xFF4264D5)
                                   : const Color(0xFF0B87EA),
-                              // decoration: TextDecoration.underline,
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 8),
                   ElevatedButton(
-                    onPressed: () async {
-                      final input = _usernameOrEmailController.text.trim();
-                      final password = _passwordController.text;
-
-                      if (input.isEmpty || password.isEmpty) {
-                        showFailMessage(
-                          context,
-                          'Error',
-                          'Please fill in all required fields.',
-                        );
-                        return;
-                      }
-
-                      final result = await loginWithEmailOrUsername(
-                        input,
-                        password,
-                      );
-
-                      if (!mounted) return;
-
-                      if (result != null && result["error"] == null) {
-                        showSuccessMessage(context, 'Signed in successfully!');
-                        context.read<AppState>().setLoggedInEmail(result["email"]);
-
-                        Navigator.push(
-                          context,
-                          PageRouteBuilder(
-                            transitionDuration: const Duration(
-                              milliseconds: 100,
-                            ),
-                            pageBuilder: (_, __, ___) => MainScreen(
-                              username: result["username"],
-                              email: result["email"],
-                              colorHex: result["color"],
-                            ),
-                            transitionsBuilder: (_, animation, __, child) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: child,
-                              );
-                            },
-                          ),
-                        );
-                      } else {
-                        showFailMessage(
-                          context,
-                          'Error',
-                          result?["error"] ?? 'Unknown error',
-                        );
-                      }
-                    },
-
+                    onPressed: isLoading ? null : handleLogin,
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 40),
                       backgroundColor: const Color(0xFF3254D0),
                       foregroundColor: Colors.white,
                     ),
-                    child: const Text('Sign in'),
+                    child: isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            ),
+                          )
+                        : const Text('Sign in'),
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -304,34 +287,21 @@ class _SignInPageState extends State<SignInPage> {
                     children: [
                       const Text("Don't have an account? "),
                       GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            PageRouteBuilder(
-                              transitionDuration: const Duration(
-                                milliseconds: 100,
-                              ),
-                              pageBuilder: (_, __, ___) => const SignUpPage(),
-                              transitionsBuilder: (_, animation, __, child) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: child,
-                                );
-                              },
-                            ),
-                          );
-                        },
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const SignUpPage()),
+                        ),
                         child: MouseRegion(
                           cursor: SystemMouseCursors.click,
                           onEnter: (_) =>
-                              setState(() => isHoveringSingin = true),
+                              setState(() => isHoveringSignin = true),
                           onExit: (_) =>
-                              setState(() => isHoveringSingin = false),
+                              setState(() => isHoveringSignin = false),
                           child: Text(
                             'Sign up',
                             style: TextStyle(
                               color: const Color(0xFF0B87EA),
-                              decoration: isHoveringSingin
+                              decoration: isHoveringSignin
                                   ? TextDecoration.underline
                                   : TextDecoration.none,
                             ),

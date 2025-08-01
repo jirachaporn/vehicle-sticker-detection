@@ -4,13 +4,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:myproject/widgets/loading.dart';
 import '../widgets/background.dart';
 import 'reset_password.dart';
-import '../providers/email_otp.dart';
+import '../providers/api_service.dart';
 import '../widgets/fail_snackbar.dart';
 
 class OTPPage extends StatefulWidget {
   final String email;
-  final String otp;
-  const OTPPage({super.key, required this.email, required this.otp});
+  // final String otp;
+  // const OTPPage({super.key, required this.email, required this.otp});
+  const OTPPage({super.key, required this.email});
 
   @override
   State<OTPPage> createState() => _OTPPageState();
@@ -36,7 +37,7 @@ class _OTPPageState extends State<OTPPage> {
   void initState() {
     super.initState();
     _startCountdown();
-    OTP = widget.otp;
+    // OTP = widget.otp;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       focusNodes[0].requestFocus();
@@ -127,21 +128,21 @@ class _OTPPageState extends State<OTPPage> {
         _isOtpIncorrect = false;
       });
 
-      OTP = EmailOtp.generateOtp();
+      // OTP = EmailOtp.generateOtp();
       email = widget.email;
-      bool emailSent = await EmailOtp.sendEmail(email, OTP);
+      // bool emailSent = await EmailOtp.sendEmail(email, OTP);
 
       if (!mounted) return;
-      if (emailSent) {
-        _startCountdown();
-        FocusScope.of(context).requestFocus(focusNodes[0]);
-      } else {
-        showFailMessage(
-          context,
-          'Error',
-          'Failed to send OTP. Please try again.',
-        );
-      }
+      // if (emailSent) {
+      //   _startCountdown();
+      //   FocusScope.of(context).requestFocus(focusNodes[0]);
+      // } else {
+      //   showFailMessage(
+      //     context,
+      //     'Error',
+      //     'Failed to send OTP. Please try again.',
+      //   );
+      // }
     } catch (e) {
       if (mounted) {
         showFailMessage(context, 'Error', 'An unexpected error occurred');
@@ -154,43 +155,42 @@ class _OTPPageState extends State<OTPPage> {
   }
 
   void _onVerifyPressed() async {
-    setState(() => isLoading = true);
+  setState(() => isLoading = true);
 
-    try {
-      String enteredOtp = controllers.map((c) => c.text).join();
+  try {
+    String enteredOtp = controllers.map((c) => c.text).join();
 
-      if (_isOtpExpired || enteredOtp.length != 4 || enteredOtp != OTP) {
-        if (!mounted) return;
-        setState(() {
-          _isOtpIncorrect = true;
-          isLoading = false;
-        });
-        return;
-      }
-
+    if (_isOtpExpired || enteredOtp.length != 4) {
       setState(() {
-        _isOtpIncorrect = false;
+        _isOtpIncorrect = true;
+        isLoading = false;
       });
+      return;
+    }
 
-      await Future.delayed(const Duration(milliseconds: 500));
+    // ✅ เรียก backend
+    final success = await ApiService.verifyOtp(widget.email, enteredOtp);
 
-      if (!mounted) return;
-      Navigator.push(
+    if (success) {
+      Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (context) => ResetPasswordPage(email: widget.email),
-        ),
+        MaterialPageRoute(builder: (_) => ResetPasswordPage(email: widget.email)),
       );
-    } catch (e) {
-      if (mounted) {
-        showFailMessage(context, 'Error', 'Verification failed');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
+    } else {
+      setState(() {
+        _isOtpIncorrect = true;
+      });
+      showFailMessage(context, 'OTP Failed', 'Invalid or expired OTP.');
+    }
+  } catch (e) {
+    showFailMessage(context, 'Error', 'Verification failed');
+  } finally {
+    if (mounted) {
+      setState(() => isLoading = false);
     }
   }
+}
+
 
   showFailMessage(BuildContext context, String errorMessage, dynamic error) {
     ScaffoldMessenger.of(context).showSnackBar(

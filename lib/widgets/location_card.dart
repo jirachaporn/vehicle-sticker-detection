@@ -107,18 +107,32 @@ class _LocationCardState extends State<LocationCard> {
                               ),
 
                               // Location address
-                              Expanded(
-                                child: Text(
-                                  widget.location.address,
-                                  style: TextStyle(
-                                    fontSize: addressFontSize,
-                                    color: Colors.grey.shade600,
-                                    height: 1.3,
-                                  ),
-                                  maxLines: constraints.maxWidth < 200 ? 1 : 2,
-                                  overflow: TextOverflow.ellipsis,
+                              Text(
+                                widget.location.address,
+                                style: TextStyle(
+                                  fontSize: addressFontSize,
+                                  color: Colors.grey.shade600,
+                                  height: 1.3,
                                 ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
+
+                              // 🆕 Description
+                              if (widget.location.description != null &&
+                                  widget.location.description!.isNotEmpty)
+                                Padding(
+                                  padding: EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    widget.location.description!,
+                                    style: TextStyle(
+                                      fontSize: addressFontSize - 1,
+                                      color: Colors.black54,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                             ],
                           ),
                         ),

@@ -65,7 +65,11 @@ class Sidebar extends StatelessWidget {
                             icon: Icons.home,
                             label: 'Home',
                             isActive: appState.currentView == AppView.home,
-                            onTap: () => appState.backToHome(),
+                            onTap: () {
+                              final email = appState.loggedInEmail;
+                              appState.loadLocations(email,); 
+                              appState.backToHome();
+                            },
                             isCollapsed: isCollapsed,
                           ),
 
@@ -86,12 +90,20 @@ class Sidebar extends StatelessWidget {
                             const SizedBox(height: 8),
                             _buildLocationMenuItem(
                               icon: Icons.sticky_note_2,
-                              label: 'Upload Stickers',
+                              label: 'Stickers',
                               isActive:
                                   appState.currentView ==
                                   AppView.uploadStickers,
                               onTap: () =>
                                   appState.setView(AppView.uploadStickers),
+                              isCollapsed: isCollapsed,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildLocationMenuItem(
+                              icon: Icons.camera_alt,
+                              label: 'Camera',
+                              isActive: appState.currentView == AppView.camera,
+                              onTap: () => appState.setView(AppView.camera),
                               isCollapsed: isCollapsed,
                             ),
                             const SizedBox(height: 8),
@@ -102,14 +114,6 @@ class Sidebar extends StatelessWidget {
                                   appState.currentView == AppView.notification,
                               onTap: () =>
                                   appState.setView(AppView.notification),
-                              isCollapsed: isCollapsed,
-                            ),
-                            const SizedBox(height: 8),
-                            _buildLocationMenuItem(
-                              icon: Icons.camera_alt,
-                              label: 'Camera',
-                              isActive: appState.currentView == AppView.camera,
-                              onTap: () => appState.setView(AppView.camera),
                               isCollapsed: isCollapsed,
                             ),
                             const SizedBox(height: 8),
@@ -269,7 +273,7 @@ class Sidebar extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Image.asset(
-                            'icon_BoxMoveLeft.png',
+                            'assets/icon_BoxMoveLeft.png',
                             width: 25,
                             height: 25,
                           ),

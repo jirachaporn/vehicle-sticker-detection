@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:myproject/widgets/back_to_sign.dart';
 import '../widgets/background.dart';
+import '../providers/api_service.dart';
 import 'otp_page.dart';
-import '../providers/email_otp.dart';
 import '../widgets/fail_snackbar.dart';
 import '../widgets/loading.dart';
 
@@ -35,34 +35,16 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
     });
 
     try {
-      // Email validation (optionally enable)
-      // if (!isValidEmail(email)) {
-      //   setState(() {
-      //     find_email = false;
-      //     isLoading = false;
-      //   });
-      //   return;
-      // }
+      final success = await ApiService.sendOtp(email);
 
-      // Check email existence (mocked as not found)
-      setState(() => isLoading = false);
-      if (!mounted) return; 
-      showFailMessage(context, 'Email not found', 'Invalid email address.');
-      // return;
-
-      // Generate & send OTP
-      OTP = EmailOtp.generateOtp();
-      bool emailSent = await EmailOtp.sendEmail(email, OTP);
-
-      if (!mounted) return; 
       setState(() => isLoading = false);
 
-      if (emailSent) {
+      if (success && mounted) {
         Navigator.push(
           context,
           PageRouteBuilder(
             transitionDuration: const Duration(milliseconds: 100),
-            pageBuilder: (_, __, ___) => OTPPage(email: email, otp: OTP),
+            pageBuilder: (_, __, ___) => OTPPage(email: email),
             transitionsBuilder: (_, animation, __, child) =>
                 FadeTransition(opacity: animation, child: child),
           ),
@@ -70,18 +52,13 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
       } else {
         showFailMessage(
           context,
-          'Error',
-          'Failed to send OTP. Please try again.',
+          'OTP Failed',
+          'Email not found or OTP not sent.',
         );
       }
     } catch (e) {
-      if (!mounted) return; 
       setState(() => isLoading = false);
-      showFailMessage(
-        context,
-        'Error',
-        'An unexpected error occurred. Please try again.',
-      );
+      showFailMessage(context, 'Error', 'Unexpected error occurred.');
     }
   }
 

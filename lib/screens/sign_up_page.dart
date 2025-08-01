@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:myproject/models/user_str.dart';
@@ -5,9 +6,7 @@ import 'package:myproject/screens/sign_in_page.dart';
 import 'package:myproject/widgets/back_to_sign.dart';
 import '../widgets/background.dart';
 import 'package:logger/logger.dart';
-
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -18,13 +17,18 @@ class SignUpPage extends StatefulWidget {
 
 class _SignUpPageState extends State<SignUpPage> {
   static final Logger _logger = Logger();
+  bool isLoading = false;
+  bool isUsernameTaken = false;
+  bool isEmailTaken = false;
+  bool _obscureText = true;
 
   final formKey = GlobalKey<FormState>();
   UserStr userStr = UserStr("", "", "");
-  bool _obscureText = true;
   final TextEditingController password_Controller = TextEditingController();
   final TextEditingController confirmPassword_Controller =
       TextEditingController();
+  final TextEditingController usernameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
 
   void _togglePasswordVisibility() {
     setState(() {
@@ -32,21 +36,141 @@ class _SignUpPageState extends State<SignUpPage> {
     });
   }
 
+  Future<void> checkUsernameExists(String username) async {
+    final supabase = Supabase.instance.client;
+    final res = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', username)
+        .maybeSingle();
+    setState(() => isUsernameTaken = res != null);
+  }
+
+  Future<void> checkEmailExists(String email) async {
+    final supabase = Supabase.instance.client;
+    final res = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+    setState(() => isEmailTaken = res != null);
+  }
+
   Future<void> signUpUser() async {
-    final response = await http.post(
-      Uri.parse('http://127.0.0.1:5000/signup'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
+    setState(() => isLoading = true);
+    final supabase = Supabase.instance.client;
+    final colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#AB47BC'];
+    final randomColor = (colors..shuffle()).first;
+
+    try {
+      final authRes = await supabase.auth.signUp(
+        email: userStr.email.trim(),
+        password: userStr.password,
+        emailRedirectTo: kIsWeb ? null : 'http://localhost',
+      );
+
+      final user = authRes.user;
+      if (user == null) throw Exception("Failed to create user");
+
+      await supabase.from('users').insert({
+        'id': user.id,
         'username': userStr.username,
         'email': userStr.email,
-        'password': userStr.password,
-      }),
-    );
+        'color_profile': randomColor,
+      });
 
-    if (response.statusCode == 201) {
+      if (!mounted) return;
+
+      if (user.emailConfirmedAt == null) {
+        await showDialog(
+          context: context,
+          builder: (_) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: 400,
+              ), // 👈 ปรับขนาดตรงนี้
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.email_outlined,
+                          color: Color(0xFF2042BD),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Confirm Your Email',
+                          style: GoogleFonts.roboto(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                            color: const Color(0xFF2042BD),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    RichText(
+                      text: TextSpan(
+                        style: GoogleFonts.roboto(
+                          fontSize: 16,
+                          color: Colors.black87,
+                        ),
+                        children: [
+                          const TextSpan(
+                            text: 'We sent a confirmation link to:\n\n',
+                          ),
+                          TextSpan(
+                            text: user.email,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const TextSpan(
+                            text:
+                                '\n\nPlease check your inbox and click the link to verify your email before logging in.',
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFF3254D0),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('OK'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
       _logger.i('✅ User registered successfully');
 
-      // ไปหน้า SignIn
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
@@ -56,24 +180,75 @@ class _SignUpPageState extends State<SignUpPage> {
               FadeTransition(opacity: animation, child: child),
         ),
       );
-    } else {
-      final message = jsonDecode(response.body)['message'];
-      _logger.i('❌ Signup failed: $message');
-
-
-      showDialog(
+    } catch (e) {
+      _logger.e('❌ Signup failed: $e');
+      await showDialog(
         context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Signup Failed'),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
+        builder: (_) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.redAccent),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Signup Failed',
+                        style: GoogleFonts.roboto(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                          color: Colors.redAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    e.toString(),
+                    style: GoogleFonts.roboto(
+                      fontSize: 16,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        backgroundColor: const Color(0xFF3254D0),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('OK'),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
       );
+    } finally {
+      setState(() => isLoading = false);
     }
   }
 
@@ -112,73 +287,60 @@ class _SignUpPageState extends State<SignUpPage> {
                         style: GoogleFonts.roboto(
                           fontSize: 40,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF1B3BA7),
+                          color: const Color(0xFF1B3BA7),
                         ),
                       ),
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
-                      // controller: username_Controller,
-                      onSaved: (String? username) {
-                        userStr.username = username!;
+                      controller: usernameController,
+                      onChanged: (val) {
+                        userStr.username = val;
+                        checkUsernameExists(val);
                       },
-
+                      onSaved: (val) => userStr.username = val!,
                       decoration: InputDecoration(
                         labelText: 'Username',
-                        enabledBorder: OutlineInputBorder(
+                        errorText: isUsernameTaken
+                            ? 'Username already exists'
+                            : null,
+                        border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF949494),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF005FAB),
-                            width: 2,
-                          ),
                         ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
+                      validator: (val) {
+                        if (val == null || val.isEmpty) {
                           return 'Please enter a username';
                         }
-                        if (value.length < 5) {
-                          return 'Password must be at least 5 characters';
+                        if (val.length < 5) {
+                          return 'At least 5 characters';
                         }
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
-                      onSaved: (String? email) {
-                        userStr.email = email!;
+                      controller: emailController,
+                      onChanged: (val) {
+                        userStr.email = val;
+                        checkEmailExists(val);
                       },
-
+                      onSaved: (val) => userStr.email = val!,
                       decoration: InputDecoration(
-                        labelText: 'E-mail',
-                        enabledBorder: OutlineInputBorder(
+                        labelText: 'Email',
+                        errorText: isEmailTaken ? 'Email already exists' : null,
+                        border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF949494),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF005FAB),
-                            width: 2,
-                          ),
                         ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
+                      validator: (val) {
+                        if (val == null || val.isEmpty) {
                           return 'Please enter an email';
                         }
                         if (!RegExp(
-                          r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
-                        ).hasMatch(value)) {
-                          return 'Please enter a valid email address';
+                          r"^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$",
+                        ).hasMatch(val)) {
+                          return 'Invalid email';
                         }
                         return null;
                       },
@@ -186,84 +348,56 @@ class _SignUpPageState extends State<SignUpPage> {
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: password_Controller,
-                      onSaved: (String? passwword) {
-                        userStr.password = passwword!;
-                      },
                       obscureText: _obscureText,
+                      onSaved: (val) => userStr.password = val!,
                       decoration: InputDecoration(
                         labelText: 'Password',
-                        enabledBorder: OutlineInputBorder(
+                        border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF949494),
-                          ),
                         ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF005FAB),
-                            width: 2,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureText
+                                ? Icons.visibility_off
+                                : Icons.visibility,
                           ),
-                        ),
-                        suffixIcon: Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: GestureDetector(
-                            onTap: _togglePasswordVisibility,
-                            child: Icon(
-                              _obscureText
-                                  ? Icons.visibility_off
-                                  : Icons.visibility,
-                            ),
-                          ),
+                          onPressed: _togglePasswordVisibility,
                         ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter a password';
+                      validator: (val) {
+                        if (val == null || val.isEmpty) {
+                          return 'Enter password';
                         }
-                        if (value.length < 8) {
-                          return 'Password must be at least 8 characters';
+                        if (val.length < 8) {
+                          return 'Min 8 chars';
                         }
-                        if (!RegExp(r'[A-Z]').hasMatch(value)) {
-                          return 'Password must be least one uppercase letter (A-Z)';
+                        if (!RegExp(r'[A-Z]').hasMatch(val)) {
+                          return '1 uppercase letter';
                         }
-                        if (!RegExp(r'[0-9]').hasMatch(value)) {
-                          return 'Password must be one digit (0-9)';
+                        if (!RegExp(r'[0-9]').hasMatch(val)) {
+                          return '1 digit';
                         }
-                        if (!RegExp(
-                          r'[!@#\$%^&*(),.?":{}|<>]',
-                        ).hasMatch(value)) {
-                          return 'Password must be least one special character (e.g. !@#\$%)';
+                        if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(val)) {
+                          return '1 special char';
                         }
-
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
-                      obscureText: true,
                       controller: confirmPassword_Controller,
+                      obscureText: true,
                       decoration: InputDecoration(
                         labelText: 'Confirm password',
-                        enabledBorder: OutlineInputBorder(
+                        border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF949494),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF005FAB),
-                            width: 2,
-                          ),
                         ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please confirm your password';
+                      validator: (val) {
+                        if (val == null || val.isEmpty) {
+                          return 'Confirm password';
                         }
-                        if (value != password_Controller.text) {
+                        if (val != password_Controller.text) {
                           return 'Passwords do not match';
                         }
                         return null;
@@ -271,22 +405,32 @@ class _SignUpPageState extends State<SignUpPage> {
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: () async {
-                        if (formKey.currentState?.validate() ?? false) {
-                          formKey.currentState?.save();
-                          await signUpUser();
-                        }
-                      },
+                      onPressed: isLoading || isUsernameTaken || isEmailTaken
+                          ? null
+                          : () async {
+                              if (formKey.currentState?.validate() ?? false) {
+                                formKey.currentState?.save();
+                                await signUpUser();
+                              }
+                            },
                       style: ElevatedButton.styleFrom(
                         minimumSize: const Size(double.infinity, 40),
                         backgroundColor: const Color(0xFF3254D0),
                         foregroundColor: Colors.white,
                       ),
-                      child: const Text('Sign up'),
+                      child: isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Sign Up'),
                     ),
-                    
-                    BackToSign()
-                    
+
+                    BackToSign(),
                   ],
                 ),
               ),

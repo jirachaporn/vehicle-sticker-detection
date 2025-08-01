@@ -15,12 +15,14 @@ enum AppView {
   uploadStickers,
 }
 
-
 class AppState extends ChangeNotifier {
   AppView _currentView = AppView.home;
   Location? _selectedLocation;
   List<Location> _locations = [];
-  String loggedInEmail = '';
+  // String loggedInEmail = '';
+  String loggedInEmail =
+      'vdowduang@gmail.com'; //ต้องลบตอนเซตไว้ใชช้การ dev ก่อน
+  String? locationId;
 
   void setLoggedInEmail(String email) {
     loggedInEmail = email;
@@ -75,6 +77,12 @@ class AppState extends ChangeNotifier {
 
   void setView(AppView view) {
     _currentView = view;
+    notifyListeners();
+  }
+
+  void setLocationId(String id) {
+    locationId = id;
+    debugPrint('✅ AppState >> locationId set to: $locationId');
     notifyListeners();
   }
 

@@ -3,7 +3,8 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:intl/intl.dart';
 
 class OverviewPage extends StatelessWidget {
-  OverviewPage({super.key});
+   final String locationId;
+  OverviewPage({super.key, required this.locationId});
 
   final Map<String, dynamic> stats = {
     'totalVehicles': 124,

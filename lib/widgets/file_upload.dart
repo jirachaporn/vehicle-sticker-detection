@@ -1,17 +1,18 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:dotted_border/dotted_border.dart';
+import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
+import '../widgets/loading.dart';
 
-
-  // import '../widgets/loading.dart';
-  // bool isUploading = false;
-  // setState(() => isUploading = true);
-  //  Loading(visible: isUploading),
-  // setState(() => isUploading = false);
-  
+// import '../widgets/loading.dart';
+// bool isUploading = false;
+// setState(() => isUploading = true);
+//  Loading(visible: isUploading),
+// setState(() => isUploading = false);
 
 class FileWrapper {
   final String name;
@@ -33,15 +34,19 @@ class FileWrapper {
 }
 
 class FileUpload extends StatefulWidget {
-  final Function(List<FileWrapper>) onUpload;
   final bool isUploading;
-  final VoidCallback? onUploadComplete; 
+  final String locationId;
+  final VoidCallback? onUploadStart;
+  final VoidCallback? onUploadComplete;
+  final VoidCallback? onUploadError;
 
   const FileUpload({
     super.key,
-    required this.onUpload,
     required this.isUploading,
+    required this.locationId,
+    this.onUploadStart,
     this.onUploadComplete,
+    this.onUploadError,
   });
 
   @override
@@ -51,6 +56,14 @@ class FileUpload extends StatefulWidget {
 class _FileUploadState extends State<FileUpload> {
   List<FileWrapper> selectedFiles = [];
   List<String> errors = [];
+  final TextEditingController modelNameController = TextEditingController();
+  String? modelNameError;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('📦 [FileUpload] widget.locationId = ${widget.locationId}');
+  }
 
   String? validateFileBytes(Uint8List bytes, String fileName) {
     final mimeType = lookupMimeType(fileName, headerBytes: bytes);
@@ -82,7 +95,7 @@ class _FileUploadState extends State<FileUpload> {
         type: FileType.custom,
         allowedExtensions: ['png', 'jpg', 'jpeg'],
         allowMultiple: true,
-        withData: kIsWeb, 
+        withData: kIsWeb,
       );
 
       if (result != null) {
@@ -155,18 +168,96 @@ class _FileUploadState extends State<FileUpload> {
     });
   }
 
-  void handleUpload() {
-    final totalSize = selectedFiles.fold(0, (sum, file) => sum + file.size);
-    
-    if (selectedFiles.length >= 5 && totalSize <= 5 * 1024 * 1024) {
-      widget.onUpload(selectedFiles);
-      
+  void handleUpload() async {
+  final totalSize = selectedFiles.fold(0, (sum, file) => sum + file.size);
+  final modelName = modelNameController.text.trim();
+
+  // ตรวจสอบชื่อโมเดล
+  if (modelName.isEmpty) {
+    setState(() {
+      modelNameError = 'Please enter a model name';
+    });
+    return;
+  } else {
+    setState(() {
+      modelNameError = null;
+    });
+  }
+
+  // ตรวจสอบไฟล์และขนาด
+  if (selectedFiles.length < 5 || totalSize > 5 * 1024 * 1024) {
+    debugPrint(
+      '❌ File validation failed: ${selectedFiles.length} files, ${totalSize} bytes',
+    );
+    return;
+  }
+
+  if (widget.locationId == "null") {
+    debugPrint("❌ Invalid locationId: ${widget.locationId}");
+    return;
+  }
+
+  // เรียก callback เมื่อเริ่มอัปโหลด
+  if (widget.onUploadStart != null) {
+    widget.onUploadStart!();
+  }
+
+  try {
+    // เริ่มอัปโหลดไฟล์
+    final uri = Uri.parse("http://127.0.0.1:5000/upload-sticker-model");
+    final request = http.MultipartRequest("POST", uri);
+    request.fields['model_name'] = modelName;
+    request.fields['location_id'] = widget.locationId;
+
+    for (final fileWrapper in selectedFiles) {
+      if (fileWrapper.bytes != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'images',
+            fileWrapper.bytes!,
+            filename: fileWrapper.name,
+          ),
+        );
+      } else if (fileWrapper.file != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'images',
+            fileWrapper.file!.path,
+            filename: fileWrapper.name,
+          ),
+        );
+      }
+    }
+
+    final streamedRes = await request.send();
+    final response = await http.Response.fromStream(streamedRes);
+
+    if (response.statusCode == 201) {
       setState(() {
         selectedFiles.clear();
         errors.clear();
+        modelNameController.clear();
       });
+
+      // เรียก callback เมื่ออัปโหลดสำเร็จ
+      if (widget.onUploadComplete != null) {
+        widget.onUploadComplete!();
+      }
+    } else {
+      debugPrint('❌ Upload failed: ${response.body}');
+      // เรียก callback เมื่อเกิดข้อผิดพลาด
+      if (widget.onUploadError != null) {
+        widget.onUploadError!();
+      }
+    }
+  } catch (e) {
+    debugPrint('❌ Upload error: $e');
+    // เรียก callback เมื่อเกิดข้อผิดพลาด
+    if (widget.onUploadError != null) {
+      widget.onUploadError!();
     }
   }
+}
 
   void clearAll() {
     setState(() {
@@ -439,42 +530,94 @@ class _FileUploadState extends State<FileUpload> {
                 ),
               ),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // ซ้าย: แสดงสถานะรูปภาพ
-                Row(
-                  children: [
-                    Icon(
-                      (selectedFiles.length >= 5 && 
-                       selectedFiles.fold(0, (sum, file) => sum + file.size) <= 5 * 1024 * 1024)
-                          ? Icons.check_circle
-                          : Icons.warning,
-                      size: 16,
-                      color: (selectedFiles.length >= 5 && 
-                              selectedFiles.fold(0, (sum, file) => sum + file.size) <= 5 * 1024 * 1024)
-                          ? const Color(0xFF059669)
-                          : const Color(0xFFE4960F),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      selectedFiles.length < 5
-                          ? '${5 - selectedFiles.length} more images needed'
-                          : selectedFiles.fold(0, (sum, file) => sum + file.size) > 5 * 1024 * 1024
-                              ? 'Total size exceeds 5MB'
-                              : 'Ready to upload!',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: (selectedFiles.length >= 5 && 
-                                selectedFiles.fold(0, (sum, file) => sum + file.size) <= 5 * 1024 * 1024)
-                            ? const Color(0xFF059669)
-                            : const Color(0xFFE4960F),
-                      ),
-                    ),
-                  ],
+                Text(
+                  selectedFiles.length < 5
+                      ? '${5 - selectedFiles.length} more images needed'
+                      : selectedFiles.fold(0, (sum, file) => sum + file.size) >
+                            5 * 1024 * 1024
+                      ? 'Total size exceeds 5MB'
+                      : 'Ready to upload!',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color:
+                        (selectedFiles.length >= 5 &&
+                            selectedFiles.fold(
+                                  0,
+                                  (sum, file) => sum + file.size,
+                                ) <=
+                                5 * 1024 * 1024)
+                        ? const Color(0xFF059669)
+                        : const Color(0xFFE4960F),
+                  ),
                 ),
+                const SizedBox(width: 8),
+
+                Icon(
+                  (selectedFiles.length >= 5 &&
+                          selectedFiles.fold(
+                                0,
+                                (sum, file) => sum + file.size,
+                              ) <=
+                              5 * 1024 * 1024)
+                      ? Icons.check_circle
+                      : Icons.warning,
+                  size: 16,
+                  color:
+                      (selectedFiles.length >= 5 &&
+                          selectedFiles.fold(
+                                0,
+                                (sum, file) => sum + file.size,
+                              ) <=
+                              5 * 1024 * 1024)
+                      ? const Color(0xFF059669)
+                      : const Color(0xFFE4960F),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Model Name',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF374151),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: modelNameController,
+              decoration: InputDecoration(
+                hintText: 'e.g. Gate1 Entry V1',
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF2563EB),
+                    width: 2,
+                  ),
+                ),
+                errorText: modelNameError?.isEmpty == true
+                    ? null
+                    : modelNameError,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
                 Row(
                   children: [
                     Row(
@@ -483,12 +626,21 @@ class _FileUploadState extends State<FileUpload> {
                           'Total: ${formatFileSize(selectedFiles.fold(0, (sum, file) => sum + file.size))}',
                           style: TextStyle(
                             fontSize: 14,
-                            color: selectedFiles.fold(0, (sum, file) => sum + file.size) > 5 * 1024 * 1024
+                            color:
+                                selectedFiles.fold(
+                                      0,
+                                      (sum, file) => sum + file.size,
+                                    ) >
+                                    5 * 1024 * 1024
                                 ? const Color(0xFFEF4444) // สีแดงถ้าเกิน 5MB
                                 : const Color(0xFF6B7280),
                           ),
                         ),
-                        if (selectedFiles.fold(0, (sum, file) => sum + file.size) > 5 * 1024 * 1024)
+                        if (selectedFiles.fold(
+                              0,
+                              (sum, file) => sum + file.size,
+                            ) >
+                            5 * 1024 * 1024)
                           const Text(
                             ' (Exceeds 5MB)',
                             style: TextStyle(
@@ -501,9 +653,14 @@ class _FileUploadState extends State<FileUpload> {
                     ),
                     const SizedBox(width: 12),
                     ElevatedButton(
-                      onPressed: (selectedFiles.length >= 5 && 
-                                 !widget.isUploading &&
-                                 selectedFiles.fold(0, (sum, file) => sum + file.size) <= 5 * 1024 * 1024)
+                      onPressed:
+                          (selectedFiles.length >= 5 &&
+                              !widget.isUploading &&
+                              selectedFiles.fold(
+                                    0,
+                                    (sum, file) => sum + file.size,
+                                  ) <=
+                                  5 * 1024 * 1024)
                           ? handleUpload
                           : null,
                       style: ElevatedButton.styleFrom(
@@ -566,8 +723,8 @@ class _FileUploadState extends State<FileUpload> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFBEA), 
-        border: Border.all(color: const Color(0xFFFCD34D)), 
+        color: const Color(0xFFFFFBEA),
+        border: Border.all(color: const Color(0xFFFCD34D)),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -578,7 +735,7 @@ class _FileUploadState extends State<FileUpload> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF92400E), 
+              color: Color(0xFF92400E),
             ),
           ),
           const SizedBox(height: 12),

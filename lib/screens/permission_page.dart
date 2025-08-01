@@ -6,7 +6,8 @@ import '../widgets/add_user_dialog.dart';
 import '../widgets/permission_dialog.dart';
 
 class PermissionPage extends StatelessWidget {
-  const PermissionPage({super.key});
+   final String locationId;
+  const PermissionPage({super.key, required this.locationId});
 
   @override
   Widget build(BuildContext context) {

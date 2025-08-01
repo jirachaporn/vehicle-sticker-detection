@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:myproject/screens/sign_in_page.dart';
@@ -7,6 +6,7 @@ import 'package:myproject/widgets/success_snackbar.dart';
 import '../widgets/background.dart';
 import '../widgets/fail_snackbar.dart';
 import '../widgets/loading.dart';
+import 'package:myproject/providers/api_service.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   final String email;
@@ -28,7 +28,6 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
   bool showConfirmError = false;
   bool isLoading = false;
 
-
   void _validatePassword(String password) {
     setState(() {
       hasUppercase = password.contains(RegExp(r'[A-Z]'));
@@ -37,17 +36,6 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
       hasMinLength = password.length >= 8;
     });
   }
-
-  // Future<void> _changePassword(String newPassword) async {
-  //   try {
-  //     final user = FirebaseAuth.instance.currentUser;
-  //     if (user != null) {
-  //       await user.updatePassword(newPassword);
-  //     }
-  //   } catch (e) {
-  //     showFailMessage(context, 'Password Update Failed', e.toString());
-  //   }
-  // }
 
   Future<void> handleSubmit() async {
     final isMatch = confirmController.text == passwordController.text;
@@ -58,29 +46,33 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
     });
 
     if (!isMatch) {
-      showFailMessage(context, 'เกิดข้อผิดพลาด', 'รหัสผ่านไม่ตรงกัน');
+      showFailMessage(context, 'Error', 'Passwords do not match');
       return;
     }
 
-    try {
-      setState(() => isLoading = true);
-      // await _changePassword(passwordController.text);
-      setState(() => isLoading = false);
+    setState(() => isLoading = true);
 
+    final success = await ApiService.resetPassword(
+      widget.email,
+      passwordController.text,
+    );
+
+    setState(() => isLoading = false);
+
+    if (success) {
+      Future.delayed(const Duration(seconds: 2), () {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const SignInPage()),
+          (route) => false,
+        );
       showSuccessMessage(context, 'Password changed successfully!');
-
-      Navigator.pushReplacement(
+      });
+    } else {
+      showFailMessage(
         context,
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 100),
-          pageBuilder: (_, __, ___) => const SignInPage(),
-          transitionsBuilder: (_, animation, __, child) =>
-              FadeTransition(opacity: animation, child: child),
-        ),
+        'Failed to change password',
+        'Please try again later',
       );
-    } catch (e) {
-      setState(() => isLoading = false);
-      showFailMessage(context, 'Change password failed', e.toString());
     }
   }
 

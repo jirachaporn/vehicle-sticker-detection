@@ -8,33 +8,34 @@ class Loading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Visibility(
-      visible: visible,
+    if (!visible) return const SizedBox.shrink();
+
+    return Positioned.fill( // ✅ ครอบเต็มจอ
       child: Stack(
         children: [
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
             child: Container(
-              color: Colors.black.withAlpha((255 * 0.5).round()),
-              width: double.infinity,
-              height: double.infinity,
+              color: Colors.black.withOpacity(0.5),
             ),
           ),
-          Center(
-            child: Container(
-              padding: const EdgeInsets.all(20),
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 113, 151, 255)),
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Color.fromARGB(255, 113, 151, 255),
+                    ),
                     strokeWidth: 5,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Text(
                     'Loading...',
                     style: TextStyle(
-                      color: const Color.fromARGB(255, 255, 255, 255),
+                      color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
