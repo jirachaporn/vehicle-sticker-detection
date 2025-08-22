@@ -11,6 +11,7 @@ import 'upload_screen.dart';
 import 'camera_page.dart';
 import 'notification_page.dart';
 import 'data_table_page.dart';
+import '../providers/permission_provider.dart';
 
 class MainScreen extends StatefulWidget {
   final String username;
@@ -82,16 +83,19 @@ class _MainScreenState extends State<MainScreen> {
                         ),
                       );
                     }
-
-
-
                     switch (appState.currentView) {
                       case AppView.home:
                         return const HomePage();
                       case AppView.overview:
                         return OverviewPage(locationId: appState.locationId ?? '');
                       case AppView.permission:
-                        return PermissionPage(locationId: appState.locationId ?? '');
+                        return ChangeNotifierProvider(
+                          create: (_) => PermissionProvider(),
+                          child: PermissionPage(
+                            locationId: appState.locationId ?? '',
+                            locationName: location.name,
+                          ),
+                        );
                       case AppView.camera:
                         return CameraPage(locationId: appState.locationId ?? '');
                       case AppView.notification:

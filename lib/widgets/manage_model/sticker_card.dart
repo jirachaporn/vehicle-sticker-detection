@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../models/sticker_model.dart';
+import '../../models/sticker_model.dart';
 
 class StickerCard extends StatelessWidget {
   final StickerModel model;
   final VoidCallback onActivate;
+  final VoidCallback onDelete;
 
-  const StickerCard({super.key, required this.model, required this.onActivate});
+  const StickerCard({
+    super.key,
+    required this.model,
+    required this.onActivate,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -200,9 +206,9 @@ class StickerCard extends StatelessWidget {
                   color: const Color(0xFF6B7280),
                 ),
               ),
-              if (!model.isActive && model.status != StickerStatus.processing)
-                const SizedBox(height: 8),
-              if (!model.isActive && model.status != StickerStatus.processing)
+              const SizedBox(height: 8),
+
+              if (!model.isActive && model.status == StickerStatus.ready)
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -227,10 +233,41 @@ class StickerCard extends StatelessWidget {
                     ),
                   ),
                 ),
+              if (!model.isActive) const SizedBox(height: 8),
+              if (!model.isActive)
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Color(0xFFDC2626),
+                    ),
+                    label: Text(
+                      'Delete',
+                      style: TextStyle(
+                        fontSize: isSmallCard ? 12 : 14,
+                        color: const Color(0xFFDC2626),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFDC2626)),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: isSmallCard ? 10 : 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         }
 
+        // สำหรับ layout แบบ Row:
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -243,9 +280,8 @@ class StickerCard extends StatelessWidget {
                 ),
               ),
             ),
-            if (!model.isActive && model.status != StickerStatus.processing)
-              const SizedBox(width: 8),
-            if (!model.isActive && model.status != StickerStatus.processing)
+            const SizedBox(width: 8),
+            if (!model.isActive && model.status == StickerStatus.ready)
               ElevatedButton(
                 onPressed: onActivate,
                 style: ElevatedButton.styleFrom(
@@ -267,6 +303,23 @@ class StickerCard extends StatelessWidget {
                   ),
                 ),
               ),
+            if (!model.isActive) const SizedBox(width: 8),
+            if (!model.isActive)
+              OutlinedButton(
+                onPressed: onDelete,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFDC2626)),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isSmallCard ? 8 : 12,
+                    vertical: isSmallCard ? 4 : 6,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.delete,
+                  color: Color(0xFFDC2626),
+                  size: 20,
+                ),
+              ),
           ],
         );
       },
@@ -274,6 +327,10 @@ class StickerCard extends StatelessWidget {
   }
 
   Color _getStatusColor() {
+    if (model.isActive) {
+      return const Color(0xFFE6F4EA);
+    }
+
     switch (model.status) {
       case StickerStatus.ready:
         return const Color(0xFFE0F2FE); // light blue
@@ -285,6 +342,10 @@ class StickerCard extends StatelessWidget {
   }
 
   Color _getStatusBorderColor() {
+    if (model.isActive) {
+      return const Color(0xFF34A853);
+    }
+
     switch (model.status) {
       case StickerStatus.ready:
         return const Color(0xFF60A5FA); // blue border
@@ -296,6 +357,14 @@ class StickerCard extends StatelessWidget {
   }
 
   Widget _getStatusIcon() {
+    if (model.isActive) {
+      return const Icon(
+        Icons.verified, //
+        size: 16,
+        color: Color(0xFF34A853),
+      );
+    }
+
     switch (model.status) {
       case StickerStatus.ready:
         return const Icon(
@@ -315,6 +384,10 @@ class StickerCard extends StatelessWidget {
   }
 
   String _getStatusText() {
+    if (model.isActive) {
+      return 'Active';
+    }
+
     switch (model.status) {
       case StickerStatus.ready:
         return 'Ready';

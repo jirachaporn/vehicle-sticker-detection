@@ -1,12 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import '../widgets/camera_stream.dart';
-import '../models/camera_Info.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+/// พอยต์แบ็คเอนด์
+const String kMobileDesktopBase = 'http://127.0.0.1:5000';
+const String kWebBase = 'http://localhost:5000';
+String _backendBase() => kIsWeb ? kWebBase : kMobileDesktopBase;
+
+/// FPS ที่จะดึงเฟรม
+const double _fps = 8;
+Duration get _interval => Duration(milliseconds: (1000 / _fps).round());
 
 class CameraPage extends StatefulWidget {
-   final String locationId;
+  final String locationId;
   const CameraPage({super.key, required this.locationId});
 
   @override
@@ -14,451 +26,425 @@ class CameraPage extends StatefulWidget {
 }
 
 class _CameraPageState extends State<CameraPage> {
-  List<CameraInfo> availableCameras = [];
-  Map<int, bool> cameraStreamingStatus = {};
-  bool isLoading = true;
-  String? errorMessage;
-  Timer? _statusTimer;
+  final _db = Supabase.instance.client;
+
+  bool _starting = false;
+  bool _running = false;
+  String? _error;
+
+  // โมเดล/ภาพอ้างอิง
+  String? _modelName;
+  String? _modelUrl;
+  List<String> _imageUrls = [];
+
+  // เฟรมสด
+  Uint8List? _frameBytes;
+  Timer? _timer;
+  Timer? _watchdog;
+  int _tick = 0;
+
+  // ดีบักเน็ตเวิร์ค
+  String? _lastUrl;
+  int? _lastStatus;
+  String? _lastCT;
+  int? _lastLen;
+  String? _lastHttpErr;
 
   @override
   void initState() {
     super.initState();
-    _initializeCameras();
-    _startStatusPolling();
+    _boot();
   }
 
   @override
   void dispose() {
-    _statusTimer?.cancel();
-    _stopAllStreams();
+    _timer?.cancel();
+    _watchdog?.cancel();
     super.dispose();
   }
 
-  Future<void> _initializeCameras() async {
-    try {
-      setState(() {
-        isLoading = true;
-        errorMessage = null;
-      });
-
-      final cameras = await _getAvailableCameras();
-
-      setState(() {
-        availableCameras = cameras;
-        for (var cam in cameras) {
-          cameraStreamingStatus[cam.id] = false;
-        }
-        isLoading = false;
-      });
-
-      
-      await _refreshCameraStatuses();
-      await _startAllStreams();
-    } catch (e) {
-      setState(() {
-        isLoading = false;
-        errorMessage = 'Failed to initialize cameras: $e';
-      });
-    }
+  Future<void> _boot() async {
+    await _loadActiveModel();
+    await _startCamera();
   }
 
-  Future<void> _startAllStreams() async {
-  for (var camera in availableCameras) {
+  Future<void> _loadActiveModel() async {
     try {
-      final response = await http.post(
-        Uri.parse('http://127.0.0.1:5000/api/cameras/${camera.id}/start'),
-      ).timeout(const Duration(seconds: 3));
+      final res = await _db
+          .from('model')
+          .select('model_name, model_url, image_urls')
+          .eq('location_id', widget.locationId)
+          .eq('is_active', true)
+          .limit(1);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          setState(() {
-            cameraStreamingStatus[camera.id] = true;
-          });
-        }
+      if (res.isNotEmpty) {
+        final row = res.first;
+        setState(() {
+          _modelName = (row['model_name'] ?? '') as String;
+          _modelUrl = (row['model_url'] ?? '') as String;
+          final imgs = row['image_urls'];
+          _imageUrls =
+              (imgs is List) ? imgs.whereType<String>().toList() : <String>[];
+        });
+      } else {
+        setState(() {
+          _modelName = null;
+          _modelUrl = null;
+          _imageUrls = [];
+          _error = 'ไม่พบโมเดลที่ Active สำหรับ Location นี้';
+        });
       }
     } catch (e) {
-      print('Error starting camera ${camera.id}: $e');
-    }
-  }
-}
-
-  Future<List<CameraInfo>> _getAvailableCameras() async {
-    final response = await http
-        .get(Uri.parse('http://127.0.0.1:5000/api/cameras/list'))
-        .timeout(const Duration(seconds: 5));
-
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((camera) => CameraInfo.fromJson(camera)).toList();
-    } else {
-      throw Exception('Failed to get cameras: ${response.statusCode}');
+      setState(() => _error = 'โหลดโมเดลล้มเหลว: $e');
     }
   }
 
-  Future<void> _refreshCameraStatuses() async {
-    for (var camera in availableCameras) {
-      try {
-        final response = await http
-            .get(
-              Uri.parse(
-                'http://127.0.0.1:5000/api/cameras/${camera.id}/status',
-              ),
-            )
-            .timeout(const Duration(seconds: 3));
-
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          setState(() {
-            cameraStreamingStatus[camera.id] = data['active'] ?? false;
-          });
-        }
-      } catch (e) {
-        print('Error checking camera ${camera.id} status: $e');
-      }
-    }
-  }
-
-  void _startStatusPolling() {
-    _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (availableCameras.isNotEmpty) {
-        _refreshCameraStatuses();
-      }
+  Future<void> _startCamera() async {
+    setState(() {
+      _starting = true;
+      _error = null;
     });
+
+    try {
+      final res = await http.post(
+        Uri.parse('${_backendBase()}/start-camera'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'location_id': widget.locationId}),
+      );
+
+      if (res.statusCode == 200) {
+        setState(() => _running = true);
+
+        // เริ่มลูปทันที
+        _startLoop();
+
+        // ยิงครั้งแรกให้แน่ใจว่า tick เด้ง
+        Future.microtask(_fetch);
+
+        // ถ้ายังไม่เด้งใน 2 วิ ให้รีสตาร์ทลูป
+        _watchdog?.cancel();
+        _watchdog = Timer(const Duration(seconds: 2), () {
+          if (!mounted) return;
+          if (_running && _tick == 0) {
+            debugPrint('Watchdog: no tick yet -> restart loop');
+            _startLoop();
+            Future.microtask(_fetch);
+          }
+        });
+      } else {
+        setState(() {
+          _running = false;
+          _error = _extractError(res.body) ?? 'Start camera failed';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _running = false;
+        _error = 'Start error: $e';
+      });
+    } finally {
+      setState(() => _starting = false);
+    }
   }
 
-  Future<void> _toggleCameraStreaming(int cameraId) async {
-    final isStreaming = cameraStreamingStatus[cameraId] ?? false;
-    final action = isStreaming ? 'stop' : 'start';
+  void _startLoop() {
+    _timer?.cancel();
+    if (!_running) return;
+    _timer = Timer.periodic(_interval, (_) => _fetch());
+  }
+
+  Future<void> _fetch() async {
+    if (!_running) return;
+
+    // ❗ ปลอดภัยบน Web: ห้ามใช้ (1<<32) เพราะบน JS = 0
+    final rnd = Random().nextInt(0x3fffffff) + 1; // 1..1073741823
+
+    final url =
+        '${_backendBase()}/frame?_=${DateTime.now().millisecondsSinceEpoch}&r=$rnd';
 
     setState(() {
-      cameraStreamingStatus[cameraId] = !isStreaming;
+      _tick++;
+      _lastUrl = url;
+      _lastHttpErr = null;
     });
 
     try {
-      final response = await http
-          .post(
-            Uri.parse('http://127.0.0.1:5000/api/cameras/$cameraId/$action'),
-            headers: {'Content-Type': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 5));
+      // ไม่ส่ง header พิเศษ เพื่อตัด preflight
+      final resp =
+          await http.get(Uri.parse(url)).timeout(const Duration(seconds: 6));
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          _showSnackBar(
-            'Camera ${isStreaming ? 'stopped' : 'started'} successfully',
-            Colors.green,
-          );
-        } else {
-          throw Exception(data['message'] ?? 'Unknown error');
-        }
-      } else {
-        throw Exception('HTTP ${response.statusCode}');
+      _lastStatus = resp.statusCode;
+      _lastCT = resp.headers['content-type'];
+      _lastLen = resp.bodyBytes.length;
+
+      if (resp.statusCode != 200) {
+        throw Exception('HTTP ${resp.statusCode}');
       }
+      if (resp.bodyBytes.isEmpty) {
+        throw Exception('bytes = 0');
+      }
+
+      setState(() => _frameBytes = resp.bodyBytes);
     } catch (e) {
-      setState(() {
-        cameraStreamingStatus[cameraId] = isStreaming;
-      });
-
-      _showSnackBar(
-        'Failed to ${isStreaming ? 'stop' : 'start'} camera: $e',
-        Colors.red,
-      );
+      setState(() => _lastHttpErr = e.toString());
     }
   }
 
-  Future<void> _stopAllStreams() async {
-    for (var cameraId in cameraStreamingStatus.keys) {
-      if (cameraStreamingStatus[cameraId] == true) {
-        try {
-          await http
-              .post(
-                Uri.parse('http://127.0.0.1:5000/api/cameras/$cameraId/stop'),
-              )
-              .timeout(const Duration(seconds: 3));
-        } catch (e) {
-          print('Error stopping camera $cameraId: $e');
-        }
-      }
-    }
+  String? _extractError(String body) {
+    try {
+      final m = jsonDecode(body);
+      if (m is Map && m['error'] != null) return m['error'].toString();
+      if (m is Map && m['message'] != null) return m['message'].toString();
+    } catch (_) {}
+    return null;
   }
-
-  void _showSnackBar(String message, Color color) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: color,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  // void _showErrorDialog(String message) {
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) => AlertDialog(
-  //       title: Row(
-  //         children: [
-  //           Icon(Icons.error_outline, color: Colors.red.shade600),
-  //           const SizedBox(width: 8),
-  //           const Text('Error'),
-  //         ],
-  //       ),
-  //       content: Text(message),
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.of(context).pop(),
-  //           child: const Text('OK'),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
-      body: Padding(
-        padding: const EdgeInsets.all(30),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(30),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.videocam, size: 28),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Camera Monitoring',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const Spacer(),
+                  _statusChip(),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              _buildModelPanel(),
+              const SizedBox(height: 16),
+
+              if (_error != null) _errorBox(_error!),
+              const SizedBox(height: 12),
+
+              Expanded(
+                child: Center(
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: _frameBytes == null
+                          ? const Center(
+                              child: Text(
+                                'กำลังดึงภาพ...',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            )
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.memory(
+                                _frameBytes!,
+                                gaplessPlayback: true,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+              _netDebugPanel(),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          await _startCamera();
+        },
+        icon: const Icon(Icons.refresh),
+        label: const Text('Restart stream'),
+      ),
+    );
+  }
+
+  Widget _statusChip() {
+    if (_starting) {
+      return const Chip(
+        avatar: SizedBox(
+          height: 18,
+          width: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        label: Text('Starting...'),
+      );
+    }
+    if (_running) {
+      return const Chip(
+        avatar: Icon(Icons.check_circle, color: Colors.green),
+        label: Text('Running'),
+        backgroundColor: Color(0xFFE8F5E9),
+      );
+    }
+    return const Chip(
+      avatar: Icon(Icons.pause_circle_filled, color: Colors.orange),
+      label: Text('Idle'),
+      backgroundColor: Color(0xFFFFF3E0),
+    );
+  }
+
+  Widget _buildModelPanel() {
+    return Card(
+      elevation: 0,
+      color: const Color(0xFFF7F1FF),
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Colors.purpleAccent.shade100),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(),
-            const SizedBox(height: 24),
-            Expanded(child: _buildContent()),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        const Text(
-          'Camera Monitoring',
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        const Spacer(),
-        ElevatedButton.icon(
-          onPressed: isLoading ? null : _initializeCameras,
-          label: Text('Refresh'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue.shade600,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(0, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildContent() {
-    if (isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
-              'Initializing cameras...',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.warning, size: 64, color: Colors.orange.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'Error',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
-              ),
-            ),
+            const Text('Active Model',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            Text(
-              errorMessage!,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _initializeCameras,
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (availableCameras.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.videocam_off, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'No Cameras Detected',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Please check camera connections and try again',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return _buildCameraGrid();
-  }
-
-  Widget _buildCameraGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        int crossAxisCount;
-        if (constraints.maxWidth >= 1200) {
-          crossAxisCount = availableCameras.length > 4 ? 3 : 2;
-        } else if (constraints.maxWidth >= 800) {
-          crossAxisCount = 2;
-        } else {
-          crossAxisCount = 1;
-        }
-
-        return GridView.builder(
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 16 / 9,
-          ),
-          itemCount: availableCameras.length,
-          itemBuilder: (context, index) {
-            final camera = availableCameras[index];
-            return _buildCameraCard(camera);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildCameraCard(CameraInfo camera) {
-    final isStreaming = cameraStreamingStatus[camera.id] ?? false;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          _buildCameraHeader(camera, isStreaming),
-          Expanded(
-            child: CameraStream(
-              isStreaming: isStreaming,
-              cameraUrl: 'http://127.0.0.1:5000/video/${camera.id}',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCameraHeader(CameraInfo camera, bool isStreaming) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.videocam, size: 20, color: Colors.grey.shade700),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
               children: [
-                Text(
-                  camera.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+                const Text('Name: ',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                Expanded(
+                  child: Text(
+                    _modelName ?? '-',
+                    style: const TextStyle(fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Camera ID: ${camera.id}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
               ],
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isStreaming ? Colors.green.shade100 : Colors.red.shade100,
-              borderRadius: BorderRadius.circular(16),
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('URL: ',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                Expanded(
+                  child: Text(
+                    _modelUrl?.isNotEmpty == true ? _modelUrl! : '-',
+                    style: const TextStyle(fontSize: 13, color: Colors.black87),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 10),
+            if (_imageUrls.isNotEmpty)
+              SizedBox(
+                height: 84,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _imageUrls.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, i) {
+                    final u = _imageUrls[i];
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: AspectRatio(
+                        aspectRatio: 1.6,
+                        child: Image.network(
+                          u,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              )
+            else
+              const Text(
+                'ยังไม่มีรูปอ้างอิง (image_urls) จาก Cloudinary',
+                style: TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _errorBox(String msg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: Colors.red.shade700, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
             child: Text(
-              isStreaming ? 'LIVE' : 'OFF',
+              msg,
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: isStreaming
-                    ? Colors.green.shade700
-                    : Colors.red.shade700,
+                color: Colors.red.shade700,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          IconButton(
-            icon: Icon(
-              isStreaming ? Icons.stop_circle : Icons.play_circle_filled,
-              color: isStreaming ? Colors.red.shade600 : Colors.green.shade600,
-              size: 28,
-            ),
-            tooltip: isStreaming ? 'Stop Stream' : 'Start Stream',
-            onPressed: () => _toggleCameraStreaming(camera.id),
+          TextButton(
+            onPressed: () async {
+              await _loadActiveModel();
+              await _startCamera();
+            },
+            child: const Text('ลองใหม่'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _netDebugPanel() {
+    final style =
+        TextStyle(color: Colors.black.withOpacity(0.75), fontSize: 12);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: DefaultTextStyle(
+        style: style,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Network Debug',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text('tick: $_tick'),
+            Text('GET: ${_lastUrl ?? "-"}',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text('status: ${_lastStatus ?? "-"}'),
+            Text('content-type: ${_lastCT ?? "-"}'),
+            Text('length: ${_lastLen ?? "-"}'),
+            if (_lastHttpErr != null) Text('error: $_lastHttpErr'),
+          ],
+        ),
       ),
     );
   }

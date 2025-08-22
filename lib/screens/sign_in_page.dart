@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:logger/logger.dart';
 
 import '../providers/app_state.dart';
 import '../widgets/background.dart';
-import '../widgets/fail_snackbar.dart';
-import '../widgets/success_snackbar.dart';
+import '../widgets/snackbar/fail_snackbar.dart';
+import '../widgets/snackbar/success_snackbar.dart';
 import 'forgot_password_page.dart';
 import 'sign_up_page.dart';
 import 'main_screen.dart';
@@ -28,8 +27,7 @@ class _SignInPageState extends State<SignInPage> {
   bool isHoveringSignin = false;
   bool isLoading = false;
 
-  static final Logger _logger = Logger();
-
+  // ------------------------------ UI helpers ---------------------------------
   void _togglePasswordVisibility() {
     setState(() => _obscureText = !_obscureText);
   }
@@ -76,12 +74,45 @@ class _SignInPageState extends State<SignInPage> {
     });
   }
 
+  // ------------------------------ Core logic ---------------------------------
+  bool _looksLikeEmail(String s) => s.contains('@');
+
+  /// ใช้ RPC (SECURITY DEFINER) เพื่อ map username -> email โดยไม่ติด RLS
+  Future<Map<String, String>?> _rpcGetEmailByUsername(String username) async {
+    final supabase = Supabase.instance.client;
+
+    final res = await supabase.rpc(
+      'get_email_by_username',
+      params: {'p_username': username.trim()},
+    );
+
+    if (res == null) return null;
+
+    // res อาจเป็น Map หรือ List ก็ได้ ขึ้นกับ PostgREST;
+    // ฟังก์ชันนี้คืน table 1 แถว -> ปกติจะได้ List<dynamic> ยาว 1
+    Map<String, dynamic>? row;
+    if (res is List && res.isNotEmpty) {
+      row = (res.first as Map).cast<String, dynamic>();
+    } else if (res is Map) {
+      row = res.cast<String, dynamic>();
+    }
+
+    if (row == null || (row['email'] as String?) == null) return null;
+
+    return {
+      'id': (row['id'] as String?) ?? '',
+      'email': (row['email'] as String).trim().toLowerCase(),
+      'username': (row['username'] as String?)?.trim() ?? '',
+      'color': (row['color_profile'] as String?)?.trim() ?? '#3254D0',
+    };
+  }
+
   Future<void> handleLogin() async {
     final supabase = Supabase.instance.client;
-    final input = _usernameOrEmailController.text.trim();
+    final inputRaw = _usernameOrEmailController.text.trim();
     final password = _passwordController.text;
 
-    if (input.isEmpty || password.isEmpty) {
+    if (inputRaw.isEmpty || password.isEmpty) {
       showFailMessage('Error', 'Please fill in all required fields.');
       return;
     }
@@ -89,19 +120,31 @@ class _SignInPageState extends State<SignInPage> {
     setState(() => isLoading = true);
 
     try {
-      final profile = await supabase
-          .from('users')
-          .select('email, username, color_profile')
-          .or('email.eq.$input,username.eq.$input')
-          .limit(1)
-          .single();
+      String loginEmail = '';
+      String displayUsername = '';
+      String colorHex = '#3254D0';
 
-      final email = profile['email'];
-      final username = profile['username'];
-      final color = profile['color_profile'];
+      if (_looksLikeEmail(inputRaw)) {
+        // ป้อนอีเมลโดยตรง
+        loginEmail = inputRaw.toLowerCase();
+      } else {
+        // ป้อนเป็น username → map ไปหา email ผ่าน RPC
+        final mapped = await _rpcGetEmailByUsername(inputRaw);
+        if (mapped == null || (mapped['email'] ?? '').isEmpty) {
+          showFailMessage(
+            'User Not Found',
+            'No account found with the entered email or username.',
+          );
+          return;
+        }
+        loginEmail = mapped['email']!;
+        displayUsername = mapped['username']!;
+        colorHex = mapped['color']!;
+      }
 
+      // 2) เข้าระบบด้วย email
       final authRes = await supabase.auth.signInWithPassword(
-        email: email,
+        email: loginEmail,
         password: password,
       );
 
@@ -110,45 +153,71 @@ class _SignInPageState extends State<SignInPage> {
         return;
       }
 
-      showSuccessMessage('Welcome $username!');
+      // 3) หลังล็อกอินแล้ว ค่อยอ่านโปรไฟล์ล่าสุดด้วยสิทธิ์ authenticated
+      final uid = authRes.user!.id;
+      final profLatest = await Supabase.instance.client
+          .from('users')
+          .select('email, username, color_profile')
+          .eq('id', uid)
+          .limit(1)
+          .maybeSingle();
+
+      final resolvedUsername =
+          (profLatest?['username'] as String?)?.trim().isNotEmpty == true
+          ? (profLatest?['username'] as String).trim()
+          : (displayUsername.isNotEmpty ? displayUsername : loginEmail);
+
+      final resolvedColor =
+          (profLatest?['color_profile'] as String?)?.trim().isNotEmpty == true
+          ? (profLatest?['color_profile'] as String).trim()
+          : colorHex;
+
+      showSuccessMessage('Welcome $resolvedUsername!');
       if (!mounted) return;
-      context.read<AppState>().setLoggedInEmail(email);
+
+      context.read<AppState>().setLoggedInEmail(loginEmail);
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              MainScreen(username: username, email: email, colorHex: color),
+          builder: (_) => MainScreen(
+            username: resolvedUsername,
+            email: loginEmail,
+            colorHex: resolvedColor,
+          ),
         ),
       );
-    } catch (e) {
-      _logger.e('Login error: $e');
-      if (e.toString().contains('invalid')) {
+    } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (msg.contains('invalid') ||
+          (msg.contains('email') && msg.contains('password'))) {
         showFailMessage(
           'Invalid Login',
           'The username or password you entered is incorrect.',
         );
-      } else if (e.toString().contains('401')) {
+      } else if (msg.contains('not confirmed')) {
         showFailMessage(
-          'Unauthorized',
-          'Please check your credentials and try again.',
+          'Email not confirmed',
+          'Please confirm your email before signing in.',
         );
-      } else if (e.toString().contains('404')) {
+      } else if (msg.contains('user not found')) {
         showFailMessage(
           'User Not Found',
           'No account found with the entered email or username.',
         );
       } else {
-        showFailMessage(
-          'Unexpected Error',
-          'Something went wrong. Please try again later.',
-        );
+        showFailMessage('Auth Error', e.message);
       }
+    } on PostgrestException catch (e) {
+      showFailMessage('Database Error', e.message);
+    } catch (e) {
+      showFailMessage('Unexpected Error', 'Something went wrong.');
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
+  // ------------------------------ UI build -----------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(

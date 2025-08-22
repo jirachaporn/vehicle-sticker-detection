@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:myproject/models/sticker_model.dart';
-import 'package:myproject/widgets/file_upload.dart';
-import 'package:myproject/widgets/sticker_card.dart';
+import 'package:myproject/widgets/manage_model/file_upload.dart';
+import 'package:myproject/widgets/manage_model/sticker_card.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:collection/collection.dart';
+import '../widgets/snackbar/fail_snackbar.dart';
 import '../widgets/loading.dart';
 
 class UploadScreen extends StatefulWidget {
@@ -40,12 +41,10 @@ class _UploadScreenState extends State<UploadScreen> {
     final supabase = Supabase.instance.client;
 
     final response = await supabase
-        .from('stickers')
+        .from('model')
         .select()
-        // .filter('location_id', 'eq', widget.locationId)
+        .filter('location_id', 'eq', widget.locationId)
         .order('created_at', ascending: false);
-
-    debugPrint('📥 Supabase raw response: $response');
 
     final List<StickerModel> fetched = (response as List<dynamic>)
         .map((e) => StickerModel.fromJson(e))
@@ -57,21 +56,117 @@ class _UploadScreenState extends State<UploadScreen> {
       debugPrint('📦 Models fetched in UploadScreen: ${models.length}');
       for (final m in models) {
         debugPrint(
-          '📦 Model: ${m.name}, isActive: ${m.isActive}, status: ${m.status}',
+          '📦 Model: ${m.name},${m.id}, isActive: ${m.isActive}, status: ${m.status}',
         );
       }
     });
   }
 
-  void handleActivate(String modelId) {
-    setState(() {
-      models = models.map((model) {
-        final isActive = model.id == modelId;
-        return model.copyWith(isActive: isActive);
-      }).toList();
-    });
+  void handleActivate(String modelId) async {
+    debugPrint('🧨 Deleting model_id: $modelId');
+    final supabase = Supabase.instance.client;
+    setState(() => isLoading = true);
 
-    // TODO: อัปเดตค่า is_active ใน Supabase ด้วยถ้าต้องการ
+    try {
+      await supabase
+          .from('model')
+          .update({'is_active': false})
+          .eq('location_id', widget.locationId);
+
+      await supabase
+          .from('model')
+          .update({'is_active': true})
+          .eq('id', modelId);
+
+      await fetchStickerModels();
+    } catch (e) {
+      showFailMessage(context, 'Activate Model Failed', e.toString());
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  showFailMessage(BuildContext context, String errorMessage, dynamic error) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.transparent,
+        duration: const Duration(seconds: 3),
+        padding: EdgeInsets.zero,
+        content: Align(
+          alignment: Alignment.topRight,
+          child: FailSnackbar(
+            title: errorMessage,
+            message: error,
+            onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void handleDelete(String modelId) async {
+    debugPrint("🧾 Sending delete request for modelId: $modelId");
+
+    final supabase = Supabase.instance.client;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: const Text('Delete Model?'),
+        content: const Text(
+          'This action cannot be undone. Do you want to proceed?',
+        ),
+        actions: [
+          OutlinedButton(
+            onPressed: () => Navigator.pop(context, false),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              side: const BorderSide(color: Colors.grey),
+              foregroundColor: Colors.black,
+            ),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFC62828),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.delete, size: 16),
+                SizedBox(width: 8),
+                Text('Delete'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final res = await supabase
+      .from('model')
+      .delete()
+      .eq('model_id', modelId);
+    debugPrint('🗑️ Delete result: $res');
+    if (res == null || (res is List && res.isEmpty)) {
+      debugPrint("❌ Nothing deleted — maybe wrong ID or permission issue?");
+    }
+
+    await fetchStickerModels();
   }
 
   void onUploadStart() {
@@ -109,7 +204,7 @@ class _UploadScreenState extends State<UploadScreen> {
                         Row(
                           children: const [
                             Text(
-                              'Upload Stickers',
+                              'Manage Models',
                               style: TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.bold,
@@ -120,11 +215,8 @@ class _UploadScreenState extends State<UploadScreen> {
                             SizedBox(width: 56, height: 56),
                           ],
                         ),
-                        const SizedBox(height: 24),
                         if (activeModel != null) _buildActiveModelSection(),
-                        const SizedBox(height: 32),
                         if (inactiveModels.isNotEmpty) _buildAllModelsSection(),
-                        const SizedBox(height: 32),
                         LayoutBuilder(
                           builder: (context, constraints) {
                             return SizedBox(
@@ -144,7 +236,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   ),
           ),
         ),
-        Positioned.fill(child: Loading(visible: isLoading || isUploading)),
+        if (isLoading || isUploading) Loading(visible: true),
       ],
     );
   }
@@ -153,6 +245,7 @@ class _UploadScreenState extends State<UploadScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const SizedBox(height: 24),
         const Text(
           'Currently Active Model',
           style: TextStyle(
@@ -162,7 +255,12 @@ class _UploadScreenState extends State<UploadScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        StickerCard(model: activeModel!, onActivate: () {}),
+        StickerCard(
+          model: activeModel!,
+          onActivate: () {},
+          onDelete: () => handleDelete(activeModel!.id),
+        ),
+      SizedBox(height: 32),
       ],
     );
   }
@@ -203,12 +301,14 @@ class _UploadScreenState extends State<UploadScreen> {
                   child: StickerCard(
                     model: model,
                     onActivate: () => handleActivate(model.id),
+                    onDelete: () => handleDelete(model.id),
                   ),
                 );
               }).toList(),
             );
           },
         ),
+        SizedBox(height: 32),
       ],
     );
   }

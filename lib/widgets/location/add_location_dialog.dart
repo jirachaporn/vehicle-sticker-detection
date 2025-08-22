@@ -3,13 +3,15 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
-import '../providers/app_state.dart';
-import '../models/location.dart';
-import '../widgets/fail_snackbar.dart';
-import '../widgets/success_snackbar.dart';
+import '../../models/location.dart';
+import '../../providers/app_state.dart';
+import '../snackbar/fail_snackbar.dart';
+import '../snackbar/success_snackbar.dart';
 
 class AddLocationDialog extends StatefulWidget {
-  const AddLocationDialog({super.key});
+  final Location? initialLocation;
+
+  const AddLocationDialog({super.key, this.initialLocation});
 
   @override
   State<AddLocationDialog> createState() => _AddLocationDialogState();
@@ -32,6 +34,18 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
     Color(0xFF00897B),
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialLocation;
+    if (initial != null) {
+      _nameController.text = initial.name;
+      _addressController.text = initial.address;
+      _descriptionController.text = initial.description ?? '';
+      _selectedColor = initial.color;
+    }
+  }
+
   bool _canSave() {
     return _nameController.text.isNotEmpty &&
         _addressController.text.isNotEmpty;
@@ -39,35 +53,43 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
 
   void _handleSave() async {
     final appState = context.read<AppState>();
+    final isEdit = widget.initialLocation != null;
 
-    final newLocation = {
+    final locationData = {
       "name": _nameController.text,
       "address": _addressController.text,
       "color": '0x${_selectedColor.value.toRadixString(16).toUpperCase()}',
-      "description": _descriptionController.text.isNotEmpty
-          ? _descriptionController.text
-          : null,
+      "description":
+          _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
       "owner_email": appState.loggedInEmail,
-      "shared_with": [],
+      "shared_with": widget.initialLocation?.sharedWith ?? [],
     };
 
+    final url = isEdit
+        ? 'http://127.0.0.1:5000/update_location/${widget.initialLocation!.id}'
+        : 'http://127.0.0.1:5000/save_locations';
+
     try {
-      final response = await http.post(
-        Uri.parse('http://127.0.0.1:5000/save_locations'),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(newLocation),
-      );
+      final response = await (isEdit
+          ? http.put(
+              Uri.parse(url),
+              headers: {"Content-Type": "application/json"},
+              body: jsonEncode(locationData),
+            )
+          : http.post(
+              Uri.parse(url),
+              headers: {"Content-Type": "application/json"},
+              body: jsonEncode(locationData),
+            ));
 
       if (!mounted) return;
 
-      if (response.statusCode == 201) {
-
-        // ✅ โหลดข้อมูลใหม่ทั้งหมดจาก backend
+      if (response.statusCode == 200 || response.statusCode == 201) {
         await appState.loadLocations(appState.loggedInEmail);
-
-        if (!mounted) return;
         Navigator.of(context).pop();
-        showSuccessMessage(context, 'Location added successfully!');
+        showSuccessMessage(context, isEdit
+            ? 'Location updated successfully!'
+            : 'Location added successfully!');
       } else {
         final error = jsonDecode(response.body);
         showFailMessage(context, 'Failed', error["message"] ?? 'Unknown error');
@@ -87,7 +109,7 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
     super.dispose();
   }
 
-  showFailMessage(BuildContext context, String errorMessage, dynamic error) {
+  void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         elevation: 0,
@@ -107,7 +129,7 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
     );
   }
 
-  showSuccessMessage(BuildContext context, String message) {
+  void showSuccessMessage(BuildContext context, String message) {
     final overlay = Overlay.of(context);
     late OverlayEntry overlayEntry;
     overlayEntry = OverlayEntry(
@@ -133,6 +155,8 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isEdit = widget.initialLocation != null;
+
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Material(
@@ -146,9 +170,9 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
             children: [
               Row(
                 children: [
-                  const Text(
-                    'Add New Location',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  Text(
+                    isEdit ? 'Edit Location' : 'Add New Location',
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   IconButton(
@@ -227,11 +251,7 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                               ),
                             ),
                             if (_selectedColor == color)
-                              const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 24,
-                              ),
+                              const Icon(Icons.check, color: Colors.white, size: 24),
                           ],
                         ),
                       );
@@ -245,43 +265,16 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      style: ButtonStyle(
-                        padding: WidgetStateProperty.all(
-                          const EdgeInsets.symmetric(vertical: 16),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        shape: WidgetStateProperty.all(
-                          RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        side: WidgetStateProperty.resolveWith<BorderSide>((
-                          states,
-                        ) {
-                          if (states.contains(WidgetState.hovered) ||
-                              states.contains(WidgetState.pressed)) {
-                            return const BorderSide(color: Colors.red);
-                          }
-                          return const BorderSide(color: Colors.grey);
-                        }),
-                        foregroundColor: WidgetStateProperty.resolveWith<Color>(
-                          (states) {
-                            if (states.contains(WidgetState.hovered) ||
-                                states.contains(WidgetState.pressed)) {
-                              return Colors.red;
-                            }
-                            return Colors.black;
-                          },
-                        ),
-                        backgroundColor: WidgetStateProperty.all(Colors.white),
-                        overlayColor: WidgetStateProperty.all(
-                          Colors.transparent,
-                        ),
+                        side: const BorderSide(color: Colors.grey),
                       ),
-
                       child: const Text('Cancel'),
                     ),
                   ),
-
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(

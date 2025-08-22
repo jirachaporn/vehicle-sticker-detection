@@ -1,9 +1,7 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/location.dart';
-import '../models/permission.dart';
 
 enum AppView {
   home,
@@ -19,10 +17,14 @@ class AppState extends ChangeNotifier {
   AppView _currentView = AppView.home;
   Location? _selectedLocation;
   List<Location> _locations = [];
-  // String loggedInEmail = '';
-  String loggedInEmail =
-      'vdowduang@gmail.com'; //ต้องลบตอนเซตไว้ใชช้การ dev ก่อน
+
+  // ลบออกก่อน deploy production
+  String loggedInEmail = 'vdowduang@gmail.com';
   String? locationId;
+
+  AppView get currentView => _currentView;
+  Location? get selectedLocation => _selectedLocation;
+  List<Location> get locations => _locations;
 
   void setLoggedInEmail(String email) {
     loggedInEmail = email;
@@ -36,44 +38,17 @@ class AppState extends ChangeNotifier {
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
-      _locations = data.map((json) => Location.fromJson(json)).toList();
+      _locations = data
+        .map((json) => Location
+        .fromJson(json))
+        .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
       notifyListeners();
     } else {
       throw Exception('Failed to load locations');
     }
   }
-
-  final List<User> _users = [
-    User(
-      id: '1',
-      name: 'Jirachaporn P.',
-      email: 'pam@example.com',
-      role: UserRole.admin,
-      permissions: [],
-      lastLogin: '2024-01-15 14:30',
-    ),
-    User(
-      id: '2',
-      name: 'Somchai Manager',
-      email: 'somchai@example.com',
-      role: UserRole.manager,
-      permissions: [],
-      lastLogin: '2024-01-15 10:15',
-    ),
-    User(
-      id: '3',
-      name: 'Malee Viewer',
-      email: 'malee@example.com',
-      role: UserRole.viewer,
-      permissions: [],
-      lastLogin: '2024-01-14 16:45',
-    ),
-  ];
-
-  AppView get currentView => _currentView;
-  Location? get selectedLocation => _selectedLocation;
-  List<Location> get locations => _locations;
-  List<User> get users => _users;
 
   void setView(AppView view) {
     _currentView = view;
@@ -103,16 +78,29 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addUser(User user) {
-    _users.add(user);
-    notifyListeners();
+
+  /// ✅ ตรวจสอบว่า logged-in user เป็น owner ของ selected location
+  bool isOwner() {
+    final userEmail = loggedInEmail;
+    final location = _selectedLocation;
+    if (location == null || userEmail.isEmpty) return false;
+
+    return location.ownerEmail == userEmail;
   }
 
-  void updateUser(User updatedUser) {
-    final index = _users.indexWhere((user) => user.id == updatedUser.id);
-    if (index != -1) {
-      _users[index] = updatedUser;
-      notifyListeners();
-    }
+  /// ✅ ตรวจสอบว่า logged-in user มีสิทธิ์ "edit" (หรือเป็น owner)
+  bool hasEditPermission() {
+    final userEmail = loggedInEmail;
+    final location = _selectedLocation;
+
+    if (location == null || userEmail.isEmpty) return false;
+
+    if (location.ownerEmail == userEmail) return true;
+
+    final sharedWith = location.sharedWith;
+    return sharedWith.any(
+      (item) => item['email'] == userEmail && item['permission'] == 'edit',
+    );
+  
   }
 }

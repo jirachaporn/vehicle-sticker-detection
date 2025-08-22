@@ -1,854 +1,274 @@
-Jp123
-pumjirach@gmail.com 
-Mad.7cute
-
-flutter run -d chrome --web-port=5000
-
-Mongo_URL=mongodb+srv://pumjirach:1769900685735@cluster0.buuiymh.mongodb.net/
-
-# import bcrypt
-# from flask import Flask, request, jsonify
-# from flask_cors import CORS
-# from pymongo import MongoClient
-# from bson.objectid import ObjectId
-# import os
-# from dotenv import load_dotenv
-# import random
-
-# load_dotenv()
-
-# Mongo_URL = os.getenv('Mongo_URL')
-# app = Flask(__name__)
-# CORS(app)
-
-# client = MongoClient(Mongo_URL)
-# db = client["Test_1"]
-# users_collection = db["user"]
-# location_collection = db["location"]
-
-# AVAILABLE_COLORS = [
-#     "#4285F4",  # Blue
-#     "#DB4437",  # Red
-#     "#F4B400",  # Yellow
-#     "#0F9D58",  # Green
-#     "#AB47BC",  # Purple
-# ]
-
-# def get_random_color():
-#     return random.choice(AVAILABLE_COLORS)
-
-# # สมัคร
-# @app.route("/signup", methods=["POST"])
-# def signup():
-#     data = request.json
-#     username = data.get("username")
-#     email = data.get("email")
-#     password = data.get("password")
-
-#     if users_collection.find_one({"email": email}):
-#         return jsonify({"message": "Email already exists"}), 400
-
-#     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-
-#     users_collection.insert_one({
-#         "username": username,
-#         "email": email,
-#         "password": hashed_password.decode('utf-8'),
-#         "color": get_random_color()
-#     })
-
-#     return jsonify({"message": "User registered successfully"}), 201
-
-# # เข้าสู่ระบบ
-# @app.route("/login", methods=["POST"])
-# def login():
-#     data = request.json
-#     input_value = data.get("input")  
-#     password = data.get("password")
-
-#     user = users_collection.find_one({
-#         "$or": [
-#             {"email": input_value},
-#             {"username": input_value}
-#         ]
-#     })
-
-#     if not user:
-#         return jsonify({"message": "User not found"}), 401
-
-#     if bcrypt.checkpw(password.encode('utf-8'), user["password"].encode('utf-8')):
-#         return jsonify({
-#             "username": user["username"],
-#             "email": user["email"],
-#             "color": user["color"]
-#         }), 200
-#     else:
-#         return jsonify({"message": "Incorrect password"}), 401
-
-# # ดึงข้อมูลผู้ใช้
-# @app.route("/get_user", methods=["POST"])
-# def get_user():
-#     data = request.json
-#     email = data.get("email")
-
-#     user = users_collection.find_one({"email": email})
-#     if not user:
-#         return jsonify({"message": "User not found"}), 404
-
-#     return jsonify({
-#         "username": user.get("username"),
-#         "email": user.get("email"),
-#         "color": user.get("color")
-#     }), 200
-
-# # ดึงข้อมูลสถานที่
-# @app.route('/locations', methods=['GET'])
-# def get_locations():
-#     user_email = request.args.get('user')
-
-#     if not user_email:
-#         return jsonify({"error": "Missing 'user' query parameter"}), 400
-
-#     query = {
-#         "$or": [
-#             {"owner_email": user_email},
-#             {"shared_with": {"$elemMatch": {"email": user_email}}}
-#         ]
-#     }
-
-#     locations = list(location_collection.find(query))
-
-#     for loc in locations:
-#         loc["_id"] = str(loc["_id"])
-
-#     return jsonify(locations)
-
-# # บันทึกข้อมูลสถานที่
-# @app.route('/save_locations', methods=['POST'])
-# def add_location():
-#     data = request.json
-#     name = data.get('name')
-#     address = data.get('address')
-#     color = data.get('color')
-#     description = data.get('description')
-#     owner_email = data.get('owner_email')
-#     shared_with = data.get('shared_with', [])
-
-#     new_location = {
-#         "name": name,
-#         "address": address,
-#         "color": color,
-#         "description": description,
-#         "owner_email": owner_email,
-#         "shared_with": shared_with
-#     }
-
-#     result = location_collection.insert_one(new_location)
-#     new_location["_id"] = str(result.inserted_id)
-
-#     return jsonify(new_location), 201
-
-
-
-# if __name__ == "__main__":
-#     app.run(debug=True, port=5000)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/app_state.dart';
+import '../models/permission.dart';
+import '../widgets/add_user_dialog.dart';
+import '../widgets/permission_dialog.dart';
 
-class CameraStream extends StatefulWidget {
-  final bool isStreaming;
-  final String cameraUrl;
-
-  const CameraStream({
-    super.key,
-    required this.isStreaming,
-    required this.cameraUrl,
-  });
-
-  @override
-  State<CameraStream> createState() => _CameraStreamState();
-}
-
-class _CameraStreamState extends State<CameraStream> {
-  String? _currentImageUrl;
-
-  @override
-  void didUpdateWidget(CameraStream oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // อัพเดท URL เมื่อ isStreaming เปลี่ยน
-    if (widget.isStreaming != oldWidget.isStreaming) {
-      if (widget.isStreaming) {
-        _updateImageUrl();
-      } else {
-        _currentImageUrl = null;
-      }
-    }
-  }
-
-  void _updateImageUrl() {
-    if (widget.isStreaming) {
-      setState(() {
-        _currentImageUrl = '${widget.cameraUrl}?t=${DateTime.now().millisecondsSinceEpoch}';
-      });
-    }
-  }
+class PermissionPage extends StatelessWidget {
+   final String locationId;
+  const PermissionPage({super.key, required this.locationId});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: widget.isStreaming && _currentImageUrl != null
-          ? ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                _currentImageUrl!,
-                key: ValueKey(_currentImageUrl),
-                fit: BoxFit.contain,  // เปลี่ยนจาก cover เป็น contain
-                width: double.infinity,
-                height: double.infinity,
-                gaplessPlayback: true,
-                headers: {
-                  "Cache-Control": "no-cache, no-store, must-revalidate",
-                  "Pragma": "no-cache",
-                  "Expires": "0",
-                },
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) {
-                    // รีเฟรช URL ทุกๆ 100ms เมื่อโหลดเสร็จ
-                    Future.delayed(const Duration(milliseconds: 100), () {
-                      if (mounted && widget.isStreaming) {
-                        _updateImageUrl();
-                      }
-                    });
-                    return child;
-                  }
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                                  (loadingProgress.expectedTotalBytes ?? 1)
-                              : null,
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Connecting to camera...',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ],
+    return Padding(
+      padding: const EdgeInsets.all(48),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'จัดการผู้ใช้',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  print('Image load error: $error');
-                  return _buildErrorState();
-                },
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'จัดการสิทธิ์การเข้าถึงข้อมูลสถานที่',
+                    style: TextStyle(fontSize: 18, color: Colors.black54),
+                  ),
+                ],
               ),
-            )
-          : widget.isStreaming
-              ? _buildLoadingState()
-              : _buildOfflineState(),
-    );
-  }
-
-  Widget _buildLoadingState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 8),
-          Text(
-            'Initializing camera...',
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOfflineState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.videocam_off, size: 48, color: Colors.grey.shade400),
-          const SizedBox(height: 8),
-          Text(
-            'Camera Offline',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline, size: 48, color: Colors.red.shade400),
-          const SizedBox(height: 8),
-          Text(
-            'Connection Error',
-            style: TextStyle(
-              color: Colors.red.shade600,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Failed to load camera stream',
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed: () {
-              if (widget.isStreaming) {
-                _updateImageUrl();
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade100,
-              foregroundColor: Colors.red.shade700,
-              minimumSize: const Size(0, 32),
-            ),
-            child: const Text('Retry', style: TextStyle(fontSize: 12)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import 'dart:async';
-import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../widgets/camera_stream.dart';
-import '../models/camera_Info.dart';
-
-class CameraPage extends StatefulWidget {
-  const CameraPage({super.key});
-
-  @override
-  State<CameraPage> createState() => _CameraPageState();
-}
-
-class _CameraPageState extends State<CameraPage> {
-  List<CameraInfo> availableCameras = [];
-  Map<int, bool> cameraStreamingStatus = {};
-  bool isLoading = true;
-  String? errorMessage;
-  Timer? _statusTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeCameras();
-    _startStatusPolling();
-  }
-
-  @override
-  void dispose() {
-    _statusTimer?.cancel();
-    _stopAllStreams();
-    super.dispose();
-  }
-
-  Future<void> _initializeCameras() async {
-    try {
-      setState(() {
-        isLoading = true;
-        errorMessage = null;
-      });
-
-      final cameras = await _getAvailableCameras();
-
-      setState(() {
-        availableCameras = cameras;
-        for (var cam in cameras) {
-          cameraStreamingStatus[cam.id] = false;
-        }
-        isLoading = false;
-      });
-
-      
-      await _refreshCameraStatuses();
-      await _startAllStreams();
-    } catch (e) {
-      setState(() {
-        isLoading = false;
-        errorMessage = 'Failed to initialize cameras: $e';
-      });
-    }
-  }
-
-  Future<void> _startAllStreams() async {
-  for (var camera in availableCameras) {
-    try {
-      final response = await http.post(
-        Uri.parse('http://127.0.0.1:5000/api/cameras/${camera.id}/start'),
-      ).timeout(const Duration(seconds: 3));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          setState(() {
-            cameraStreamingStatus[camera.id] = true;
-          });
-        }
-      }
-    } catch (e) {
-      print('Error starting camera ${camera.id}: $e');
-    }
-  }
-}
-
-  Future<List<CameraInfo>> _getAvailableCameras() async {
-    final response = await http
-        .get(Uri.parse('http://127.0.0.1:5000/api/cameras/list'))
-        .timeout(const Duration(seconds: 5));
-
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body);
-      return data.map((camera) => CameraInfo.fromJson(camera)).toList();
-    } else {
-      throw Exception('Failed to get cameras: ${response.statusCode}');
-    }
-  }
-
-  Future<void> _refreshCameraStatuses() async {
-    for (var camera in availableCameras) {
-      try {
-        final response = await http
-            .get(
-              Uri.parse(
-                'http://127.0.0.1:5000/api/cameras/${camera.id}/status',
+              const Spacer(),
+              ElevatedButton.icon(
+                onPressed: () => _showAddUserDialog(context),
+                icon: const Icon(Icons.add),
+                label: const Text('เพิ่มผู้ใช้'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                ),
               ),
-            )
-            .timeout(const Duration(seconds: 3));
-
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          setState(() {
-            cameraStreamingStatus[camera.id] = data['active'] ?? false;
-          });
-        }
-      } catch (e) {
-        print('Error checking camera ${camera.id} status: $e');
-      }
-    }
+            ],
+          ),
+          const SizedBox(height: 48),
+          // Expanded(
+          //   child: Card(
+          //     child: Consumer<AppState>(
+          //       builder: (context, appState, child) {
+          //         return SingleChildScrollView(
+                    // child: DataTable(
+                    //   columnSpacing: 32,
+                    //   headingRowHeight: 60,
+                    //   dataRowMinHeight: 80,
+                    //   dataRowMaxHeight: 80,
+                    //   columns: const [
+                    //     DataColumn(
+                    //       label: Text(
+                    //         'ผู้ใช้',
+                    //         style: TextStyle(
+                    //           fontWeight: FontWeight.w600,
+                    //           color: Colors.black87,
+                    //         ),
+                    //       ),
+                    //     ),
+                    //     DataColumn(
+                    //       label: Text(
+                    //         'บทบาท',
+                    //         style: TextStyle(
+                    //           fontWeight: FontWeight.w600,
+                    //           color: Colors.black87,
+                    //         ),
+                    //       ),
+                    //     ),
+                    //     DataColumn(
+                    //       label: Text(
+                    //         'สิทธิ์เข้าถึง',
+                    //         style: TextStyle(
+                    //           fontWeight: FontWeight.w600,
+                    //           color: Colors.black87,
+                    //         ),
+                    //       ),
+                    //     ),
+                    //     DataColumn(
+                    //       label: Text(
+                    //         'เข้าใช้ล่าสุด',
+                    //         style: TextStyle(
+                    //           fontWeight: FontWeight.w600,
+                    //           color: Colors.black87,
+                    //         ),
+                    //       ),
+                    //     ),
+                    //     DataColumn(
+                    //       label: Text(
+                    //         'สถานะ',
+                    //         style: TextStyle(
+                    //           fontWeight: FontWeight.w600,
+                    //           color: Colors.black87,
+                    //         ),
+                    //       ),
+                    //     ),
+                    //     DataColumn(
+                    //       label: Text(
+                    //         'การจัดการ',
+                    //         style: TextStyle(
+                    //           fontWeight: FontWeight.w600,
+                    //           color: Colors.black87,
+                    //         ),
+                    //       ),
+                    //     ),
+                    //   ],
+                      // rows: appState.users.map((user) {
+                        // return DataRow(
+                        //   cells: [
+                        //     DataCell(
+                        //       Row(
+                        //         children: [
+                        //           CircleAvatar(
+                        //             backgroundColor: Colors.blue.shade500,
+                        //             child: const Icon(
+                        //               Icons.person,
+                        //               color: Colors.white,
+                        //             ),
+                        //           ),
+                        //           const SizedBox(width: 16),
+                        //           Column(
+                        //             mainAxisAlignment: MainAxisAlignment.center,
+                        //             crossAxisAlignment:
+                        //                 CrossAxisAlignment.start,
+                        //             children: [
+                        //               Text(
+                        //                 user.name,
+                        //                 style: const TextStyle(
+                        //                   fontWeight: FontWeight.w600,
+                        //                   fontSize: 16,
+                        //                 ),
+                        //               ),
+                        //               Text(
+                        //                 user.email,
+                        //                 style: TextStyle(
+                        //                   color: Colors.grey.shade600,
+                        //                 ),
+                        //               ),
+                        //             ],
+                        //           ),
+                        //         ],
+                        //       ),
+                        //     ),
+                        //     DataCell(
+                        //       Container(
+                        //         padding: const EdgeInsets.symmetric(
+                        //           horizontal: 16,
+                        //           vertical: 8,
+                        //         ),
+                        //         decoration: BoxDecoration(
+                        //           color: _getRoleColor(user.role),
+                        //           borderRadius: BorderRadius.circular(20),
+                        //         ),
+                        //         child: Text(
+                        //           _getRoleText(user.role),
+                        //           style: TextStyle(
+                        //             color: _getRoleTextColor(user.role),
+                        //             fontWeight: FontWeight.w500,
+                        //             fontSize: 12,
+                        //           ),
+                        //         ),
+                        //       ),
+                        //     ),
+                        //     DataCell(
+                        //       Text(
+                        //         '${user.permissions.length} สถานที่',
+                        //         style: TextStyle(color: Colors.grey.shade600),
+                        //       ),
+                        //     ),
+                        //     DataCell(
+                        //       Text(
+                        //         user.lastLogin ?? 'ยังไม่เคยเข้าใช้',
+                        //         style: TextStyle(color: Colors.grey.shade600),
+                        //       ),
+                        //     ),
+                        //     DataCell(
+                        //       Container(
+                        //         padding: const EdgeInsets.symmetric(
+                        //           horizontal: 16,
+                        //           vertical: 8,
+                        //         ),
+                        //         decoration: BoxDecoration(
+                        //           color: user.isActive
+                        //               ? Colors.green.shade100
+                        //               : Colors.red.shade100,
+                        //           borderRadius: BorderRadius.circular(20),
+                        //         ),
+                        //         child: Text(
+                        //           user.isActive ? 'ใช้งาน' : 'ปิดใช้งาน',
+                        //           style: TextStyle(
+                        //             color: user.isActive
+                        //                 ? Colors.green.shade800
+                        //                 : Colors.red.shade800,
+                        //             fontWeight: FontWeight.w500,
+                        //             fontSize: 12,
+                        //           ),
+                        //         ),
+                        //       ),
+                        //     ),
+                        //     DataCell(
+                        //       TextButton(
+                        //         onPressed: () =>
+                        //             _showPermissionDialog(context, user),
+                        //         child: const Text('จัดการสิทธิ์'),
+                        //       ),
+                        //     ),
+                        //   ],
+                        // );
+                      // }).toList(),
+          //           ),
+          //         );
+          //       },
+          //     ),
+          //   ),
+          // ),
+        ],
+      ),
+    );
   }
 
-  void _startStatusPolling() {
-    _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (availableCameras.isNotEmpty) {
-        _refreshCameraStatuses();
-      }
-    });
+  void _showAddUserDialog(BuildContext context) {
+    showDialog(context: context, builder: (context) => const AddUserDialog());
   }
 
-  Future<void> _toggleCameraStreaming(int cameraId) async {
-    final isStreaming = cameraStreamingStatus[cameraId] ?? false;
-    final action = isStreaming ? 'stop' : 'start';
-
-    setState(() {
-      cameraStreamingStatus[cameraId] = !isStreaming;
-    });
-
-    try {
-      final response = await http
-          .post(
-            Uri.parse('http://127.0.0.1:5000/api/cameras/$cameraId/$action'),
-            headers: {'Content-Type': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 5));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          _showSnackBar(
-            'Camera ${isStreaming ? 'stopped' : 'started'} successfully',
-            Colors.green,
-          );
-        } else {
-          throw Exception(data['message'] ?? 'Unknown error');
-        }
-      } else {
-        throw Exception('HTTP ${response.statusCode}');
-      }
-    } catch (e) {
-      setState(() {
-        cameraStreamingStatus[cameraId] = isStreaming;
-      });
-
-      _showSnackBar(
-        'Failed to ${isStreaming ? 'stop' : 'start'} camera: $e',
-        Colors.red,
-      );
-    }
-  }
-
-  Future<void> _stopAllStreams() async {
-    for (var cameraId in cameraStreamingStatus.keys) {
-      if (cameraStreamingStatus[cameraId] == true) {
-        try {
-          await http
-              .post(
-                Uri.parse('http://127.0.0.1:5000/api/cameras/$cameraId/stop'),
-              )
-              .timeout(const Duration(seconds: 3));
-        } catch (e) {
-          print('Error stopping camera $cameraId: $e');
-        }
-      }
-    }
-  }
-
-  void _showSnackBar(String message, Color color) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: color,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  // void _showErrorDialog(String message) {
+  // void _showPermissionDialog(BuildContext context, User user) {
   //   showDialog(
   //     context: context,
-  //     builder: (context) => AlertDialog(
-  //       title: Row(
-  //         children: [
-  //           Icon(Icons.error_outline, color: Colors.red.shade600),
-  //           const SizedBox(width: 8),
-  //           const Text('Error'),
-  //         ],
-  //       ),
-  //       content: Text(message),
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.of(context).pop(),
-  //           child: const Text('OK'),
-  //         ),
-  //       ],
-  //     ),
+  //     builder: (context) => PermissionDialog(user: user),
   //   );
   // }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      body: Padding(
-        padding: const EdgeInsets.all(30),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 24),
-            Expanded(child: _buildContent()),
-          ],
-        ),
-      ),
-    );
-  }
+  // Color _getRoleColor(UserRole role) {
+  //   switch (role) {
+  //     case UserRole.admin:
+  //       return Colors.red.shade100;
+  //     case UserRole.manager:
+  //       return Colors.blue.shade100;
+  //     case UserRole.viewer:
+  //       return Colors.green.shade100;
+  //   }
+  // }
 
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        const Text(
-          'Camera Monitoring',
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        const Spacer(),
-        ElevatedButton.icon(
-          onPressed: isLoading ? null : _initializeCameras,
-          label: Text('Refresh'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue.shade600,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(0, 48),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  // Color _getRoleTextColor(UserRole role) {
+  //   switch (role) {
+  //     case UserRole.admin:
+  //       return Colors.red.shade800;
+  //     case UserRole.manager:
+  //       return Colors.blue.shade800;
+  //     case UserRole.viewer:
+  //       return Colors.green.shade800;
+  //   }
+  // }
 
-  Widget _buildContent() {
-    if (isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text(
-              'Initializing cameras...',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.warning, size: 64, color: Colors.orange.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'Error',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              errorMessage!,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _initializeCameras,
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (availableCameras.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.videocam_off, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              'No Cameras Detected',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Please check camera connections and try again',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return _buildCameraGrid();
-  }
-
-  Widget _buildCameraGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        int crossAxisCount;
-        if (constraints.maxWidth >= 1200) {
-          crossAxisCount = availableCameras.length > 4 ? 3 : 2;
-        } else if (constraints.maxWidth >= 800) {
-          crossAxisCount = 2;
-        } else {
-          crossAxisCount = 1;
-        }
-
-        return GridView.builder(
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 16 / 9,
-          ),
-          itemCount: availableCameras.length,
-          itemBuilder: (context, index) {
-            final camera = availableCameras[index];
-            return _buildCameraCard(camera);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildCameraCard(CameraInfo camera) {
-    final isStreaming = cameraStreamingStatus[camera.id] ?? false;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          _buildCameraHeader(camera, isStreaming),
-          Expanded(
-            child: CameraStream(
-              isStreaming: isStreaming,
-              cameraUrl: 'http://127.0.0.1:5000/video/${camera.id}',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCameraHeader(CameraInfo camera, bool isStreaming) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.videocam, size: 20, color: Colors.grey.shade700),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  camera.name,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Camera ID: ${camera.id}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isStreaming ? Colors.green.shade100 : Colors.red.shade100,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Text(
-              isStreaming ? 'LIVE' : 'OFF',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: isStreaming
-                    ? Colors.green.shade700
-                    : Colors.red.shade700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          IconButton(
-            icon: Icon(
-              isStreaming ? Icons.stop_circle : Icons.play_circle_filled,
-              color: isStreaming ? Colors.red.shade600 : Colors.green.shade600,
-              size: 28,
-            ),
-            tooltip: isStreaming ? 'Stop Stream' : 'Start Stream',
-            onPressed: () => _toggleCameraStreaming(camera.id),
-          ),
-        ],
-      ),
-    );
-  }
+  // String _getRoleText(UserRole role) {
+  //   switch (role) {
+  //     case UserRole.admin:
+  //       return 'ผู้ดูแลระบบ';
+  //     case UserRole.manager:
+  //       return 'ผู้จัดการ';
+  //     case UserRole.viewer:
+  //       return 'ผู้ดู';
+  //   }
+  // }
 }

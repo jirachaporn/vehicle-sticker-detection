@@ -1,257 +1,269 @@
-import 'package:flutter/foundation.dart';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:myproject/widgets/snackbar/fail_snackbar.dart';
+import 'package:myproject/widgets/snackbar/success_snackbar.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:myproject/models/user_str.dart';
 import 'package:myproject/screens/sign_in_page.dart';
 import 'package:myproject/widgets/back_to_sign.dart';
 import '../widgets/background.dart';
-import 'package:logger/logger.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
-
   @override
   State<SignUpPage> createState() => _SignUpPageState();
 }
 
 class _SignUpPageState extends State<SignUpPage> {
-  static final Logger _logger = Logger();
   bool isLoading = false;
   bool isUsernameTaken = false;
-  bool isEmailTaken = false;
   bool _obscureText = true;
 
   final formKey = GlobalKey<FormState>();
   UserStr userStr = UserStr("", "", "");
+
   final TextEditingController password_Controller = TextEditingController();
   final TextEditingController confirmPassword_Controller =
       TextEditingController();
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
 
-  void _togglePasswordVisibility() {
-    setState(() {
-      _obscureText = !_obscureText;
-    });
+  void _togglePasswordVisibility() =>
+      setState(() => _obscureText = !_obscureText);
+
+  // ใช้ Edge Function เป็นหน้า landing หลังยืนยันอีเมล
+  // ตั้งค่าใน .env: CONFIRM_REDIRECT_URL=https://.../functions/v1/confirm-signup
+  String _buildEmailRedirect() {
+    final url =
+        (dotenv.env['CONFIRM_REDIRECT_URL'] ??
+                'https://qwiofwruecrdyfqdbwvu.supabase.co/functions/v1/confirm-signup')
+            .trim();
+    return url.endsWith('/') ? url.substring(0, url.length - 1) : url;
   }
 
   Future<void> checkUsernameExists(String username) async {
     final supabase = Supabase.instance.client;
-    final res = await supabase
-        .from('users')
-        .select('id')
-        .eq('username', username)
-        .maybeSingle();
-    setState(() => isUsernameTaken = res != null);
-  }
-
-  Future<void> checkEmailExists(String email) async {
-    final supabase = Supabase.instance.client;
-    final res = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', email)
-        .maybeSingle();
-    setState(() => isEmailTaken = res != null);
-  }
-
-  Future<void> signUpUser() async {
-    setState(() => isLoading = true);
-    final supabase = Supabase.instance.client;
-    final colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#AB47BC'];
-    final randomColor = (colors..shuffle()).first;
-
+    final u = username.trim();
     try {
-      final authRes = await supabase.auth.signUp(
-        email: userStr.email.trim(),
-        password: userStr.password,
-        emailRedirectTo: kIsWeb ? null : 'http://localhost',
-      );
+      final res = await supabase
+          .from('users')
+          .select('id')
+          .eq('username', u)
+          .limit(1);
+      setState(() => isUsernameTaken = res.isNotEmpty);
+    } on PostgrestException {
+      setState(() => isUsernameTaken = false);
+    } catch (_) {
+      setState(() => isUsernameTaken = false);
+    }
+  }
 
-      final user = authRes.user;
-      if (user == null) throw Exception("Failed to create user");
-
-      await supabase.from('users').insert({
-        'id': user.id,
-        'username': userStr.username,
-        'email': userStr.email,
-        'color_profile': randomColor,
-      });
-
-      if (!mounted) return;
-
-      if (user.emailConfirmedAt == null) {
-        await showDialog(
-          context: context,
-          builder: (_) => Dialog(
-            shape: RoundedRectangleBorder(
+  Future<void> _showConfirmDialog(String title, String message) async {
+    await showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 400,
-              ), // 👈 ปรับขนาดตรงนี้
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.email_outlined,
-                          color: Color(0xFF2042BD),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Confirm Your Email',
-                          style: GoogleFonts.roboto(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                            color: const Color(0xFF2042BD),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    RichText(
-                      text: TextSpan(
-                        style: GoogleFonts.roboto(
-                          fontSize: 16,
-                          color: Colors.black87,
-                        ),
-                        children: [
-                          const TextSpan(
-                            text: 'We sent a confirmation link to:\n\n',
-                          ),
-                          TextSpan(
-                            text: user.email,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const TextSpan(
-                            text:
-                                '\n\nPlease check your inbox and click the link to verify your email before logging in.',
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          backgroundColor: const Color(0xFF3254D0),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('OK'),
+                    Icon(Icons.error_outline, color: Colors.amber[700]),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Confirm Your Email',
+                      style: GoogleFonts.roboto(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        color: Colors.amber[700],
                       ),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  style: GoogleFonts.roboto(
+                    fontSize: 16,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      backgroundColor: const Color(0xFF3254D0),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('OK'),
+                  ),
+                ),
+              ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // --- Sign up ---------------------------------------------------------------
+  Future<void> signUpUser() async {
+    userStr.email = userStr.email.trim();
+    userStr.username = userStr.username.trim();
+    if (!(formKey.currentState?.validate() ?? false)) return;
+
+    setState(() => isLoading = true);
+    final supabase = Supabase.instance.client;
+
+    final colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#AB47BC'];
+    final color = colors[Random.secure().nextInt(colors.length)];
+
+    try {
+      final email = userStr.email;
+      final username = userStr.username;
+      final redirectUrl = _buildEmailRedirect();
+
+      if (!RegExp(r'^[A-Za-z0-9_]{3,20}$').hasMatch(username)) {
+        showFailMessage(
+          'Invalid username',
+          'Use 3–20 chars: A–Z a–z 0–9 or underscore.',
         );
+        return;
       }
 
-      _logger.i('✅ User registered successfully');
+      debugPrint('🔄 Starting signup process...');
+      debugPrint('Email: $email');
+      debugPrint('Username: $username');
+      debugPrint('Color: $color');
+      debugPrint('Redirect: $redirectUrl');
+
+      final authRes = await supabase.auth.signUp(
+        email: email,
+        password: userStr.password,
+        emailRedirectTo: redirectUrl,
+        data: {'username': username, 'color_profile': color},
+      );
+
+      if (authRes.user == null) {
+        throw const AuthException(
+          'User creation returned null',
+          statusCode: '500',
+        );
+      }
+      debugPrint('✅ Auth user created: ${authRes.user!.id}');
+
+      if (!mounted) return;
+
+      if (authRes.user!.emailConfirmedAt == null) {
+        await _showConfirmDialog(
+          'Confirm Your Email',
+          'We sent a confirmation link to:\n\n$email\n\nPlease verify your email before logging in.',
+        );
+      }
 
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 100),
+          transitionDuration: const Duration(milliseconds: 120),
           pageBuilder: (_, __, ___) => const SignInPage(),
           transitionsBuilder: (_, animation, __, child) =>
               FadeTransition(opacity: animation, child: child),
         ),
       );
+    } on AuthException catch (e) {
+      debugPrint('❌ Signup failed: ${e.message}');
+      debugPrint('📄 Error code: ${e.statusCode}');
+      String userMessage =
+          'There was a database error while creating your account. Please try again.';
+      final m = e.message.toLowerCase();
+      if (m.contains('user already registered')) {
+        userMessage =
+            'This email is already registered. Try signing in instead.';
+      } else if (m.contains('invalid email')) {
+        userMessage = 'Please enter a valid email address.';
+      }
+      showFailMessage('Signup Failed', userMessage);
     } catch (e) {
-      _logger.e('❌ Signup failed: $e');
-      await showDialog(
-        context: context,
-        builder: (_) => Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.redAccent),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Signup Failed',
-                        style: GoogleFonts.roboto(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 20,
-                          color: Colors.redAccent,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    e.toString(),
-                    style: GoogleFonts.roboto(
-                      fontSize: 16,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        backgroundColor: const Color(0xFF3254D0),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('OK'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
+      debugPrint('❌ Signup failed (unknown): $e');
+      String userMessage = 'An unexpected error occurred';
+
+      final s = e.toString().toLowerCase();
+      if (s.contains('duplicate key') && s.contains('username')) {
+        userMessage =
+            'This username is already taken. Please choose a different one.';
+      }
+
+      showFailMessage('Signup Failed', userMessage);
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
+  // --- Snackbars -------------------------------------------------------------
+  void showFailMessage(String title, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        elevation: 0,
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.transparent,
+        duration: const Duration(seconds: 3),
+        padding: EdgeInsets.zero,
+        content: Align(
+          alignment: Alignment.topRight,
+          child: FailSnackbar(
+            title: title,
+            message: message,
+            onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void showSuccessMessage(String message) {
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: 10,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          child: SuccessSnackbar(
+            message: message,
+            onClose: () => entry.remove(),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3), () {
+      if (entry.mounted) entry.remove();
+    });
+  }
+
+  // --- UI --------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -294,11 +306,17 @@ class _SignUpPageState extends State<SignUpPage> {
                     const SizedBox(height: 20),
                     TextFormField(
                       controller: usernameController,
-                      onChanged: (val) {
-                        userStr.username = val;
-                        checkUsernameExists(val);
+                      onChanged: (v) {
+                        final s = v.trim();
+                        userStr.username = s;
+                        if (s.length >= 3) {
+                          checkUsernameExists(s);
+                        } else {
+                          setState(() => isUsernameTaken = false);
+                        }
                       },
-                      onSaved: (val) => userStr.username = val!,
+                      onSaved: (v) =>
+                          userStr.username = (v ?? '').trim(),
                       decoration: InputDecoration(
                         labelText: 'Username',
                         errorText: isUsernameTaken
@@ -308,38 +326,31 @@ class _SignUpPageState extends State<SignUpPage> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      validator: (val) {
-                        if (val == null || val.isEmpty) {
-                          return 'Please enter a username';
-                        }
-                        if (val.length < 5) {
-                          return 'At least 5 characters';
-                        }
+                      validator: (v) {
+                        final s = (v ?? '').trim();
+                        if (s.isEmpty) return 'Please enter a username';
+                        if (s.length < 3) return 'At least 3 characters';
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: emailController,
-                      onChanged: (val) {
-                        userStr.email = val;
-                        checkEmailExists(val);
-                      },
-                      onSaved: (val) => userStr.email = val!,
+                      onChanged: (v) => userStr.email = v,
+                      onSaved: (v) =>
+                          userStr.email = (v ?? '').trim(),
                       decoration: InputDecoration(
                         labelText: 'Email',
-                        errorText: isEmailTaken ? 'Email already exists' : null,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      validator: (val) {
-                        if (val == null || val.isEmpty) {
-                          return 'Please enter an email';
-                        }
+                      validator: (v) {
+                        final s = (v ?? '').trim();
+                        if (s.isEmpty) return 'Please enter an email';
                         if (!RegExp(
-                          r"^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$",
-                        ).hasMatch(val)) {
+                          r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,}$',
+                        ).hasMatch(s)) {
                           return 'Invalid email';
                         }
                         return null;
@@ -349,7 +360,7 @@ class _SignUpPageState extends State<SignUpPage> {
                     TextFormField(
                       controller: password_Controller,
                       obscureText: _obscureText,
-                      onSaved: (val) => userStr.password = val!,
+                      onSaved: (v) => userStr.password = v ?? '',
                       decoration: InputDecoration(
                         labelText: 'Password',
                         border: OutlineInputBorder(
@@ -364,22 +375,15 @@ class _SignUpPageState extends State<SignUpPage> {
                           onPressed: _togglePasswordVisibility,
                         ),
                       ),
-                      validator: (val) {
-                        if (val == null || val.isEmpty) {
-                          return 'Enter password';
-                        }
-                        if (val.length < 8) {
-                          return 'Min 8 chars';
-                        }
-                        if (!RegExp(r'[A-Z]').hasMatch(val)) {
+                      validator: (v) {
+                        final s = v ?? '';
+                        if (s.isEmpty) return 'Enter password';
+                        if (s.length < 8) return 'Min 8 chars';
+                        if (!RegExp(r'[A-Z]').hasMatch(s))
                           return '1 uppercase letter';
-                        }
-                        if (!RegExp(r'[0-9]').hasMatch(val)) {
-                          return '1 digit';
-                        }
-                        if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(val)) {
+                        if (!RegExp(r'[0-9]').hasMatch(s)) return '1 digit';
+                        if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(s))
                           return '1 special char';
-                        }
                         return null;
                       },
                     ),
@@ -393,19 +397,16 @@ class _SignUpPageState extends State<SignUpPage> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      validator: (val) {
-                        if (val == null || val.isEmpty) {
-                          return 'Confirm password';
-                        }
-                        if (val != password_Controller.text) {
+                      validator: (v) {
+                        if ((v ?? '').isEmpty) return 'Confirm password';
+                        if (v != password_Controller.text)
                           return 'Passwords do not match';
-                        }
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: isLoading || isUsernameTaken || isEmailTaken
+                      onPressed: isLoading || isUsernameTaken
                           ? null
                           : () async {
                               if (formKey.currentState?.validate() ?? false) {
@@ -429,7 +430,6 @@ class _SignUpPageState extends State<SignUpPage> {
                             )
                           : const Text('Sign Up'),
                     ),
-
                     BackToSign(),
                   ],
                 ),

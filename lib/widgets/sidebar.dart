@@ -67,7 +67,7 @@ class Sidebar extends StatelessWidget {
                             isActive: appState.currentView == AppView.home,
                             onTap: () {
                               final email = appState.loggedInEmail;
-                              appState.loadLocations(email,); 
+                              appState.loadLocations(email);
                               appState.backToHome();
                             },
                             isCollapsed: isCollapsed,
@@ -79,6 +79,8 @@ class Sidebar extends StatelessWidget {
                             if (!isCollapsed)
                               _buildLocationHeader(appState.selectedLocation!),
                             if (!isCollapsed) const SizedBox(height: 12),
+
+                            // ✅ ทุกคนเห็น Overview
                             _buildLocationMenuItem(
                               icon: Icons.dashboard,
                               label: 'Overview',
@@ -87,17 +89,23 @@ class Sidebar extends StatelessWidget {
                               onTap: () => appState.setView(AppView.overview),
                               isCollapsed: isCollapsed,
                             ),
-                            const SizedBox(height: 8),
-                            _buildLocationMenuItem(
-                              icon: Icons.sticky_note_2,
-                              label: 'Stickers',
-                              isActive:
-                                  appState.currentView ==
-                                  AppView.uploadStickers,
-                              onTap: () =>
-                                  appState.setView(AppView.uploadStickers),
-                              isCollapsed: isCollapsed,
-                            ),
+
+                            // ✅ owner และ edit เห็น Stickers
+                            if (appState.hasEditPermission()) ...[
+                              const SizedBox(height: 8),
+                              _buildLocationMenuItem(
+                                icon: Icons.sticky_note_2,
+                                label: 'Stickers',
+                                isActive:
+                                    appState.currentView ==
+                                    AppView.uploadStickers,
+                                onTap: () =>
+                                    appState.setView(AppView.uploadStickers),
+                                isCollapsed: isCollapsed,
+                              ),
+                            ],
+
+                            // ✅ ทุกคนเห็น Camera, Notification, Table
                             const SizedBox(height: 8),
                             _buildLocationMenuItem(
                               icon: Icons.camera_alt,
@@ -125,15 +133,19 @@ class Sidebar extends StatelessWidget {
                               isCollapsed: isCollapsed,
                             ),
 
-                            const SizedBox(height: 8),
-                            _buildLocationMenuItem(
-                              icon: Icons.vpn_key,
-                              label: 'Add Permission',
-                              isActive:
-                                  appState.currentView == AppView.permission,
-                              onTap: () => appState.setView(AppView.permission),
-                              isCollapsed: isCollapsed,
-                            ),
+                            // ✅ Add Permission เฉพาะ owner เท่านั้น
+                            if (appState.isOwner()) ...[
+                              const SizedBox(height: 8),
+                              _buildLocationMenuItem(
+                                icon: Icons.vpn_key,
+                                label: 'Add Permission',
+                                isActive:
+                                    appState.currentView == AppView.permission,
+                                onTap: () =>
+                                    appState.setView(AppView.permission),
+                                isCollapsed: isCollapsed,
+                              ),
+                            ],
                           ],
                         ],
                       );

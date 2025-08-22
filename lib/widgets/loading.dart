@@ -10,7 +10,9 @@ class Loading extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!visible) return const SizedBox.shrink();
 
-    return Positioned.fill( // ✅ ครอบเต็มจอ
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
       child: Stack(
         children: [
           BackdropFilter(

@@ -36,7 +36,7 @@ class StickerModel {
         [];
 
     return StickerModel(
-      id: json['stickers_id'] as String,
+      id: json['model_id'] as String,
       name: json['model_name'] as String,
       images: imageList,
       isActive: json['is_active'] as bool,

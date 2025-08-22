@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:myproject/screens/sign_in_page.dart';
 import 'package:myproject/widgets/back_to_sign.dart';
-import 'package:myproject/widgets/success_snackbar.dart';
+import 'package:myproject/widgets/snackbar/success_snackbar.dart';
 import '../widgets/background.dart';
-import '../widgets/fail_snackbar.dart';
+import '../widgets/snackbar/fail_snackbar.dart';
 import '../widgets/loading.dart';
 import 'package:myproject/providers/api_service.dart';
 
@@ -65,7 +65,7 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
           MaterialPageRoute(builder: (_) => const SignInPage()),
           (route) => false,
         );
-      showSuccessMessage(context, 'Password changed successfully!');
+      showSuccessMessage(context, 'Successfully!');
       });
     } else {
       showFailMessage(

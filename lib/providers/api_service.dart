@@ -1,13 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:logger/logger.dart';
-import 'dart:io';
 
 class ApiService {
-  static final String baseUrl = Platform.isAndroid
-      ? 'http://10.0.2.2:5000' // Android Emulator
-      : 'http://127.0.0.1:5000'; // Desktop/Web (localhost)
-  static final Logger logger = Logger();
+  static final String baseUrl = 'http://127.0.0.1:5000'; // Desktop/Web (localhost)
   static http.Client client = http.Client(); // default client ใช้งานจริง
   static Uri get updatePasswordUrl => Uri.parse('$baseUrl/reset-password');
 
@@ -22,12 +18,12 @@ class ApiService {
         body: jsonEncode({'email': email}),
       );
 
-      logger.d('📡 Response status: ${response.statusCode}');
-      logger.d('📡 Response body: ${response.body}');
+      debugPrint('📡 Response status: ${response.statusCode}');
+      debugPrint('📡 Response body: ${response.body}');
 
       return response.statusCode == 200;
     } catch (e) {
-      logger.d('❌ Error during POST: $e');
+      debugPrint('❌ Error during POST: $e');
       return false;
     }
   }
@@ -43,10 +39,10 @@ class ApiService {
         body: jsonEncode({"email": email, "otp": otp}),
       );
 
-      logger.d('✅ OTP verify response: ${response.body}');
+      debugPrint('✅ OTP verify response: ${response.body}');
       return response.statusCode == 200;
     } catch (e) {
-      logger.d("❌ OTP verify failed: $e");
+      debugPrint("❌ OTP verify failed: $e");
       return false;
     }
   }
@@ -61,10 +57,10 @@ class ApiService {
         body: jsonEncode({'email': email, 'new_password': newPassword}),
       );
 
-      logger.d('🛠️ Reset Password: ${response.statusCode}');
+      debugPrint('🛠️ Reset Password: ${response.statusCode}');
       return response.statusCode == 200;
     } catch (e) {
-      logger.d('❌ Error resetting password: $e');
+      debugPrint('❌ Error resetting password: $e');
       return false;
     }
   }

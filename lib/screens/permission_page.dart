@@ -1,274 +1,249 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/app_state.dart';
-import '../models/permission.dart';
-import '../widgets/add_user_dialog.dart';
-import '../widgets/permission_dialog.dart';
+import 'package:http/http.dart' as http;
 
-class PermissionPage extends StatelessWidget {
-   final String locationId;
-  const PermissionPage({super.key, required this.locationId});
+import '../providers/permission_provider.dart';
+import '../models/permission.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+// Widgets แยกย่อย
+import '../widgets/permission/members_tab.dart';
+import '../widgets/permission/invite_tab.dart';
+import '../widgets/permission/logs_tab.dart';
+import '../widgets/permission/dialogs.dart';
+
+class PermissionPage extends StatefulWidget {
+  final String locationId;
+  final String? locationName;
+
+  const PermissionPage({
+    super.key,
+    required this.locationId,
+    this.locationName,
+  });
+
+  @override
+  State<PermissionPage> createState() => _PermissionPageState();
+}
+
+class _PermissionPageState extends State<PermissionPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tab;
+  final _inviteEmailCtrl = TextEditingController();
+  final _inviteNameCtrl = TextEditingController();
+  String _invitePerm = PermissionType.view;
+  bool _loadingInvite = false;
+  bool _loading = false;
+
+  Future<void> _loadAll(PermissionProvider p) async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    try {
+      await Future.wait([
+        // แม้จะไม่แสดง Owner แล้ว แต่ยัง preload ไว้ได้หาก provider ใช้ cache ที่อื่น
+        p.isOwner(widget.locationId),
+        p.listMembers(widget.locationId),
+        p.listLogs(widget.locationId),
+      ]);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _refreshAll() async {
+    final p = context.read<PermissionProvider>();
+    await _loadAll(p);
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAll());
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    _inviteEmailCtrl.dispose();
+    _inviteNameCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(48),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'จัดการผู้ใช้',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'จัดการสิทธิ์การเข้าถึงข้อมูลสถานที่',
-                    style: TextStyle(fontSize: 18, color: Colors.black54),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              ElevatedButton.icon(
-                onPressed: () => _showAddUserDialog(context),
-                icon: const Icon(Icons.add),
-                label: const Text('เพิ่มผู้ใช้'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 48),
-          Expanded(
-            child: Card(
-              child: Consumer<AppState>(
-                builder: (context, appState, child) {
-                  return SingleChildScrollView(
-                    child: DataTable(
-                      columnSpacing: 32,
-                      headingRowHeight: 60,
-                      dataRowMinHeight: 80,
-                      dataRowMaxHeight: 80,
-                      columns: const [
-                        DataColumn(
-                          label: Text(
-                            'ผู้ใช้',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'บทบาท',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'สิทธิ์เข้าถึง',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'เข้าใช้ล่าสุด',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'สถานะ',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'การจัดการ',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                      ],
-                      rows: appState.users.map((user) {
-                        return DataRow(
-                          cells: [
-                            DataCell(
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: Colors.blue.shade500,
-                                    child: const Icon(
-                                      Icons.person,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        user.name,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      Text(
-                                        user.email,
-                                        style: TextStyle(
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            DataCell(
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _getRoleColor(user.role),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  _getRoleText(user.role),
-                                  style: TextStyle(
-                                    color: _getRoleTextColor(user.role),
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              Text(
-                                '${user.permissions.length} สถานที่',
-                                style: TextStyle(color: Colors.grey.shade600),
-                              ),
-                            ),
-                            DataCell(
-                              Text(
-                                user.lastLogin ?? 'ยังไม่เคยเข้าใช้',
-                                style: TextStyle(color: Colors.grey.shade600),
-                              ),
-                            ),
-                            DataCell(
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: user.isActive
-                                      ? Colors.green.shade100
-                                      : Colors.red.shade100,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  user.isActive ? 'ใช้งาน' : 'ปิดใช้งาน',
-                                  style: TextStyle(
-                                    color: user.isActive
-                                        ? Colors.green.shade800
-                                        : Colors.red.shade800,
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              TextButton(
-                                onPressed: () =>
-                                    _showPermissionDialog(context, user),
-                                child: const Text('จัดการสิทธิ์'),
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-                  );
-                },
-              ),
-            ),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF1F1F1), // ✅ เพิ่มตรงนี้
+      appBar: AppBar(
+        title: Text(
+          'Permissions · ${widget.locationName ?? widget.locationId}',
+        ),
+        bottom: TabBar(
+          controller: _tab,
+          tabs: const [
+            Tab(text: 'สมาชิก'),
+            Tab(text: 'เพิ่มคำเชิญ'),
+            Tab(text: 'ประวัติ (Logs)'),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'รีเฟรช',
+            onPressed: _loading ? null : _refreshAll,
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : TabBarView(
+              controller: _tab,
+              children: [
+                MembersTab(
+                  locationId: widget.locationId,
+                  onChanged: _refreshAll,
+                ),
+                InviteTab(
+                  locationId: widget.locationId,
+                  inviteEmailCtrl: _inviteEmailCtrl,
+                  inviteNameCtrl: _inviteNameCtrl,
+                  invitePerm: _invitePerm,
+                  onPermChanged: (v) => setState(() => _invitePerm = v),
+                  loading: _loadingInvite,
+                  onSubmit: () async {
+                    await _handleInvite();
+                  },
+                ),
+                LogsTab(
+                  locationId: widget.locationId,
+                  onExpireSweep: () async {
+                    await _handleExpireSweep();
+                  },
+                ),
+              ],
+            ),
     );
   }
 
-  void _showAddUserDialog(BuildContext context) {
-    showDialog(context: context, builder: (context) => const AddUserDialog());
+  Future<void> _handleInvite() async {
+    final provider = context.read<PermissionProvider>();
+    final email = _inviteEmailCtrl.text.trim();
+    final name = _inviteNameCtrl.text.trim().isEmpty
+        ? null
+        : _inviteNameCtrl.text.trim();
+
+    if (!_isEmail(email)) {
+      _toast(context, 'กรุณากรอกอีเมลให้ถูกต้อง');
+      return;
+    }
+
+    setState(() => _loadingInvite = true);
+    try {
+      // 1) ขอ token สำหรับคำเชิญ (logic เดิมของคุณ)
+      final token = await provider.invite(
+        locationId: widget.locationId,
+        inviteEmail: email,
+        permission: _invitePerm,
+        inviteName: name,
+      );
+
+      // 2) ประกอบลิงก์ยืนยันให้ชัดเจน (ชี้ไปยัง Supabase Function ของคุณ)
+      final baseUrl = dotenv.env['SUPABASE_FUNCTION_URL']?.trim();
+      final uri = (baseUrl == null || baseUrl.isEmpty)
+          ? '${dotenv.env['SUPABASE_URL']}/functions/v1'
+          : baseUrl;
+      final link = '$uri/confirm-permission?token=$token';
+
+      // 3) ส่งลิงก์ไปทางอีเมลให้ผู้รับ "กดจากเมล์"
+      await _sendInviteEmail(
+        toEmail: email,
+        linkUrl: link,
+        invitedName: name,
+        locationName: widget.locationName,
+      );
+
+      if (!mounted) return;
+
+      // (ออปชัน Dev) คัดลอกลิงก์ไว้เผื่อดีบัก/ทดสอบเร็ว
+      await copyToClipboardAndDialogSuccess(
+        context,
+        title: 'ส่งคำเชิญสำเร็จ',
+        message:
+            'ลิงก์ยืนยันถูกส่งไปยังอีเมลผู้รับแล้ว\n\n(สำหรับทดสอบ) คัดลอกลิงก์ไว้ให้ด้วย:\n$link',
+        copyText: link,
+      );
+
+      // ล้างฟอร์ม
+      _inviteEmailCtrl.clear();
+      _inviteNameCtrl.clear();
+      if (!mounted) return;
+      setState(() => _invitePerm = PermissionType.view);
+
+      // reload ข้อมูล
+      await _loadAll(provider);
+      if (!mounted) return;
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      _toast(context, 'เชิญไม่สำเร็จ: $e');
+    } finally {
+      if (mounted) setState(() => _loadingInvite = false);
+    }
   }
 
-  void _showPermissionDialog(BuildContext context, User user) {
-    showDialog(
-      context: context,
-      builder: (context) => PermissionDialog(user: user),
+  Future<void> _handleExpireSweep() async {
+    final provider = context.read<PermissionProvider>();
+    try {
+      await provider.markExpiredInvites();
+      if (!mounted) return;
+      _toast(context, 'อัปเดตคำเชิญหมดอายุแล้ว');
+
+      await _loadAll(provider);
+      if (!mounted) return;
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      _toast(context, 'ไม่สำเร็จ: $e');
+    }
+  }
+
+  /// ===== ส่งอีเมลด้วยการเรียก API หลังบ้าน (/send-permission-email) =====
+  Future<void> _sendInviteEmail({
+    required String toEmail,
+    required String linkUrl,
+    String? invitedName,
+    String? locationName,
+  }) async {
+    final base = 'http://127.0.0.1:5000';
+    final endpoint = Uri.parse('$base/send-permission-email');
+
+    final res = await http.post(
+      endpoint,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'to_email': toEmail,
+        'link_url': linkUrl,
+        'invited_name': invitedName ?? '',
+        'location_name': locationName ?? ' Unknow',
+        'subject': 'ยืนยันสิทธิ์เข้าถึง ${locationName ?? ''}'.trim(),
+      }),
     );
-  }
 
-  Color _getRoleColor(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return Colors.red.shade100;
-      case UserRole.manager:
-        return Colors.blue.shade100;
-      case UserRole.viewer:
-        return Colors.green.shade100;
+    if (res.statusCode != 200) {
+      debugPrint('ส่งอีเมลล้มเหลว: ${res.body}');
+      throw Exception('ส่งอีเมลล้มเหลว: ${res.body}');
     }
   }
+}
 
-  Color _getRoleTextColor(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return Colors.red.shade800;
-      case UserRole.manager:
-        return Colors.blue.shade800;
-      case UserRole.viewer:
-        return Colors.green.shade800;
-    }
-  }
+/// ===== Utilities (local) =====
+bool _isEmail(String v) {
+  final re = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+  return re.hasMatch(v);
+}
 
-  String _getRoleText(UserRole role) {
-    switch (role) {
-      case UserRole.admin:
-        return 'ผู้ดูแลระบบ';
-      case UserRole.manager:
-        return 'ผู้จัดการ';
-      case UserRole.viewer:
-        return 'ผู้ดู';
-    }
-  }
+void _toast(BuildContext context, String msg) {
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 }

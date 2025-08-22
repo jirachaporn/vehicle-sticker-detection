@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -6,13 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
-import '../widgets/loading.dart';
-
-// import '../widgets/loading.dart';
-// bool isUploading = false;
-// setState(() => isUploading = true);
-//  Loading(visible: isUploading),
-// setState(() => isUploading = false);
 
 class FileWrapper {
   final String name;
@@ -169,95 +161,95 @@ class _FileUploadState extends State<FileUpload> {
   }
 
   void handleUpload() async {
-  final totalSize = selectedFiles.fold(0, (sum, file) => sum + file.size);
-  final modelName = modelNameController.text.trim();
+    final totalSize = selectedFiles.fold(0, (sum, file) => sum + file.size);
+    final modelName = modelNameController.text.trim();
 
-  // ตรวจสอบชื่อโมเดล
-  if (modelName.isEmpty) {
-    setState(() {
-      modelNameError = 'Please enter a model name';
-    });
-    return;
-  } else {
-    setState(() {
-      modelNameError = null;
-    });
-  }
-
-  // ตรวจสอบไฟล์และขนาด
-  if (selectedFiles.length < 5 || totalSize > 5 * 1024 * 1024) {
-    debugPrint(
-      '❌ File validation failed: ${selectedFiles.length} files, ${totalSize} bytes',
-    );
-    return;
-  }
-
-  if (widget.locationId == "null") {
-    debugPrint("❌ Invalid locationId: ${widget.locationId}");
-    return;
-  }
-
-  // เรียก callback เมื่อเริ่มอัปโหลด
-  if (widget.onUploadStart != null) {
-    widget.onUploadStart!();
-  }
-
-  try {
-    // เริ่มอัปโหลดไฟล์
-    final uri = Uri.parse("http://127.0.0.1:5000/upload-sticker-model");
-    final request = http.MultipartRequest("POST", uri);
-    request.fields['model_name'] = modelName;
-    request.fields['location_id'] = widget.locationId;
-
-    for (final fileWrapper in selectedFiles) {
-      if (fileWrapper.bytes != null) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'images',
-            fileWrapper.bytes!,
-            filename: fileWrapper.name,
-          ),
-        );
-      } else if (fileWrapper.file != null) {
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'images',
-            fileWrapper.file!.path,
-            filename: fileWrapper.name,
-          ),
-        );
-      }
+    // ตรวจสอบชื่อโมเดล
+    if (modelName.isEmpty) {
+      setState(() {
+        modelNameError = 'Please enter a model name';
+      });
+      return;
+    } else {
+      setState(() {
+        modelNameError = null;
+      });
     }
 
-    final streamedRes = await request.send();
-    final response = await http.Response.fromStream(streamedRes);
+    // ตรวจสอบไฟล์และขนาด
+    if (selectedFiles.length < 5 || totalSize > 5 * 1024 * 1024) {
+      debugPrint(
+        '❌ File validation failed: ${selectedFiles.length} files, ${totalSize} bytes',
+      );
+      return;
+    }
 
-    if (response.statusCode == 201) {
-      setState(() {
-        selectedFiles.clear();
-        errors.clear();
-        modelNameController.clear();
-      });
+    if (widget.locationId == "null") {
+      debugPrint("❌ Invalid locationId: ${widget.locationId}");
+      return;
+    }
 
-      // เรียก callback เมื่ออัปโหลดสำเร็จ
-      if (widget.onUploadComplete != null) {
-        widget.onUploadComplete!();
+    // เรียก callback เมื่อเริ่มอัปโหลด
+    if (widget.onUploadStart != null) {
+      widget.onUploadStart!();
+    }
+
+    try {
+      // เริ่มอัปโหลดไฟล์
+      final uri = Uri.parse("http://127.0.0.1:5000/upload-sticker-model");
+      final request = http.MultipartRequest("POST", uri);
+      request.fields['model_name'] = modelName;
+      request.fields['location_id'] = widget.locationId;
+
+      for (final fileWrapper in selectedFiles) {
+        if (fileWrapper.bytes != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'images',
+              fileWrapper.bytes!,
+              filename: fileWrapper.name,
+            ),
+          );
+        } else if (fileWrapper.file != null) {
+          request.files.add(
+            await http.MultipartFile.fromPath(
+              'images',
+              fileWrapper.file!.path,
+              filename: fileWrapper.name,
+            ),
+          );
+        }
       }
-    } else {
-      debugPrint('❌ Upload failed: ${response.body}');
+
+      final streamedRes = await request.send();
+      final response = await http.Response.fromStream(streamedRes);
+
+      if (response.statusCode == 201) {
+        setState(() {
+          selectedFiles.clear();
+          errors.clear();
+          modelNameController.clear();
+        });
+
+        // เรียก callback เมื่ออัปโหลดสำเร็จ
+        if (widget.onUploadComplete != null) {
+          widget.onUploadComplete!();
+        }
+      } else {
+        debugPrint('❌ Upload failed: ${response.body}');
+        // เรียก callback เมื่อเกิดข้อผิดพลาด
+        if (widget.onUploadError != null) {
+          widget.onUploadError!();
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Upload error: $e');
       // เรียก callback เมื่อเกิดข้อผิดพลาด
       if (widget.onUploadError != null) {
         widget.onUploadError!();
       }
     }
-  } catch (e) {
-    debugPrint('❌ Upload error: $e');
-    // เรียก callback เมื่อเกิดข้อผิดพลาด
-    if (widget.onUploadError != null) {
-      widget.onUploadError!();
-    }
   }
-}
 
   void clearAll() {
     setState(() {
@@ -712,12 +704,12 @@ class _FileUploadState extends State<FileUpload> {
 
   Widget _buildUsageInstructions() {
     final instructions = [
+      'Model accuracy depends on the quality and variety of the uploaded images **',
       'Upload at least 5 high-quality images (PNG or JPG format)',
-      'Each image must be less than 5MB in size',
       'Total size of all images must not exceed 5MB',
       'Only one model can be active at a time',
-      'New uploads will automatically deactivate the current active model',
       'You can reactivate previous models at any time',
+      'Crop images to show only the sticker area and take photos from multiple angles',
     ];
 
     return Container(

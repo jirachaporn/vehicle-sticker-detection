@@ -4,7 +4,7 @@ import 'package:myproject/widgets/back_to_sign.dart';
 import '../widgets/background.dart';
 import '../providers/api_service.dart';
 import 'otp_page.dart';
-import '../widgets/fail_snackbar.dart';
+import '../widgets/snackbar/fail_snackbar.dart';
 import '../widgets/loading.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
