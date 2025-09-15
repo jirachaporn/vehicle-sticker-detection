@@ -1,3 +1,4 @@
+// lib/pages/permission_page.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -5,9 +6,8 @@ import 'package:http/http.dart' as http;
 
 import '../providers/permission_provider.dart';
 import '../models/permission.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-// Widgets แยกย่อย
+// Tabs
 import '../widgets/permission/members_tab.dart';
 import '../widgets/permission/invite_tab.dart';
 import '../widgets/permission/logs_tab.dart';
@@ -30,32 +30,15 @@ class PermissionPage extends StatefulWidget {
 class _PermissionPageState extends State<PermissionPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
+
   final _inviteEmailCtrl = TextEditingController();
   final _inviteNameCtrl = TextEditingController();
-  String _invitePerm = PermissionType.view;
-  bool _loadingInvite = false;
+
+  /// เก็บสิทธิ์ในฟอร์มแบบ String ให้ตรงกับ InviteTab เดิม: "owner" | "edit" | "view"
+  String _invitePerm = 'view';
+
   bool _loading = false;
-
-  Future<void> _loadAll(PermissionProvider p) async {
-    if (!mounted) return;
-    setState(() => _loading = true);
-    try {
-      await Future.wait([
-        // แม้จะไม่แสดง Owner แล้ว แต่ยัง preload ไว้ได้หาก provider ใช้ cache ที่อื่น
-        p.isOwner(widget.locationId),
-        p.listMembers(widget.locationId),
-        p.listLogs(widget.locationId),
-      ]);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _refreshAll() async {
-    final p = context.read<PermissionProvider>();
-    await _loadAll(p);
-    if (mounted) setState(() {});
-  }
+  bool _loadingInvite = false;
 
   @override
   void initState() {
@@ -72,14 +55,26 @@ class _PermissionPageState extends State<PermissionPage>
     super.dispose();
   }
 
+  Future<void> _refreshAll() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    try {
+      // เติมสมาชิกของ location นี้เข้าคาเช่
+      await context.read<PermissionProvider>().loadMembers(widget.locationId); // ✅
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final perm = context.watch<PermissionProvider>();
+    final isOwner = perm.isOwner(widget.locationId);
+    final canEdit = perm.canEdit(widget.locationId);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F1F1), // ✅ เพิ่มตรงนี้
       appBar: AppBar(
-        title: Text(
-          'Permissions · ${widget.locationName ?? widget.locationId}',
-        ),
+        title: Text(widget.locationName ?? 'Permissions'),
         bottom: TabBar(
           controller: _tab,
           tabs: const [
@@ -90,9 +85,9 @@ class _PermissionPageState extends State<PermissionPage>
         ),
         actions: [
           IconButton(
-            tooltip: 'รีเฟรช',
             onPressed: _loading ? null : _refreshAll,
             icon: const Icon(Icons.refresh),
+            tooltip: 'รีเฟรช',
           ),
         ],
       ),
@@ -105,22 +100,26 @@ class _PermissionPageState extends State<PermissionPage>
                   locationId: widget.locationId,
                   onChanged: _refreshAll,
                 ),
+                // InviteTab ใช้ String
                 InviteTab(
                   locationId: widget.locationId,
                   inviteEmailCtrl: _inviteEmailCtrl,
                   inviteNameCtrl: _inviteNameCtrl,
-                  invitePerm: _invitePerm,
+                  invitePerm: _invitePerm, // "owner" | "edit" | "view"
                   onPermChanged: (v) => setState(() => _invitePerm = v),
                   loading: _loadingInvite,
                   onSubmit: () async {
+                    // อนุญาตเฉพาะ owner/editor
+                    if (!(isOwner || canEdit)) {
+                      _toast(context, 'คุณไม่มีสิทธิ์เชิญสมาชิก');
+                      return;
+                    }
                     await _handleInvite();
                   },
                 ),
                 LogsTab(
                   locationId: widget.locationId,
-                  onExpireSweep: () async {
-                    await _handleExpireSweep();
-                  },
+                  onExpireSweep: _handleExpireSweep, // จะเป็น toast "ยังไม่รองรับ"
                 ),
               ],
             ),
@@ -139,24 +138,25 @@ class _PermissionPageState extends State<PermissionPage>
       return;
     }
 
+    // แปลง String -> PermissionType ด้วย fromDb (รองรับ 'owner' | 'edit' | 'view')
+    final permType = PermissionTypeX.fromDb(_invitePerm); // ✅
+
     setState(() => _loadingInvite = true);
     try {
-      // 1) ขอ token สำหรับคำเชิญ (logic เดิมของคุณ)
-      final token = await provider.invite(
+      // 1) บันทึกคำเชิญ (สถานะ invited)
+      await provider.upsertMember(
         locationId: widget.locationId,
-        inviteEmail: email,
-        permission: _invitePerm,
-        inviteName: name,
+        email: email,
+        name: name,
+        permission: permType,
+        status: MemberStatus.invited, // ✅ เก็บสถานะคำเชิญ
       );
 
-      // 2) ประกอบลิงก์ยืนยันให้ชัดเจน (ชี้ไปยัง Supabase Function ของคุณ)
-      final baseUrl = dotenv.env['SUPABASE_FUNCTION_URL']?.trim();
-      final uri = (baseUrl == null || baseUrl.isEmpty)
-          ? '${dotenv.env['SUPABASE_URL']}/functions/v1'
-          : baseUrl;
-      final link = '$uri/confirm-permission?token=$token';
+      // 2) สร้างลิงก์ยืนยันแบบง่าย (ถ้ามี endpoint ยืนยันจริงค่อยปรับ)
+      final link =
+          'https://example.com/confirm-permission?location_id=${Uri.encodeComponent(widget.locationId)}&email=${Uri.encodeComponent(email)}';
 
-      // 3) ส่งลิงก์ไปทางอีเมลให้ผู้รับ "กดจากเมล์"
+      // 3) ส่งอีเมลผ่าน backend (ถ้าไม่มี endpoint นี้ ให้คอมเมนต์ทิ้งได้)
       await _sendInviteEmail(
         toEmail: email,
         linkUrl: link,
@@ -166,25 +166,20 @@ class _PermissionPageState extends State<PermissionPage>
 
       if (!mounted) return;
 
-      // (ออปชัน Dev) คัดลอกลิงก์ไว้เผื่อดีบัก/ทดสอบเร็ว
       await copyToClipboardAndDialogSuccess(
         context,
         title: 'ส่งคำเชิญสำเร็จ',
-        message:
-            'ลิงก์ยืนยันถูกส่งไปยังอีเมลผู้รับแล้ว\n\n(สำหรับทดสอบ) คัดลอกลิงก์ไว้ให้ด้วย:\n$link',
+        message: 'คัดลอกลิงก์ยืนยันไว้ให้:\n$link',
         copyText: link,
       );
 
       // ล้างฟอร์ม
       _inviteEmailCtrl.clear();
       _inviteNameCtrl.clear();
-      if (!mounted) return;
-      setState(() => _invitePerm = PermissionType.view);
+      setState(() => _invitePerm = 'view');
 
-      // reload ข้อมูล
-      await _loadAll(provider);
-      if (!mounted) return;
-      setState(() {});
+      // reload รายชื่อสมาชิก
+      await provider.loadMembers(widget.locationId); // ✅
     } catch (e) {
       if (!mounted) return;
       _toast(context, 'เชิญไม่สำเร็จ: $e');
@@ -194,30 +189,20 @@ class _PermissionPageState extends State<PermissionPage>
   }
 
   Future<void> _handleExpireSweep() async {
-    final provider = context.read<PermissionProvider>();
-    try {
-      await provider.markExpiredInvites();
-      if (!mounted) return;
-      _toast(context, 'อัปเดตคำเชิญหมดอายุแล้ว');
-
-      await _loadAll(provider);
-      if (!mounted) return;
-      setState(() {});
-    } catch (e) {
-      if (!mounted) return;
-      _toast(context, 'ไม่สำเร็จ: $e');
-    }
+    // ตอนนี้ยังไม่มี markExpiredInvites ใน PermissionProvider
+    _toast(context, 'ยังไม่รองรับการสแกนคำเชิญหมดอายุในเวอร์ชันนี้');
+    // ถ้าต้องการ ให้เพิ่มเมธอดใน PermissionProvider แล้วค่อยเรียกใช้ที่นี่
   }
 
-  /// ===== ส่งอีเมลด้วยการเรียก API หลังบ้าน (/send-permission-email) =====
+  // ----- helpers -----
   Future<void> _sendInviteEmail({
     required String toEmail,
     required String linkUrl,
     String? invitedName,
     String? locationName,
   }) async {
-    final base = 'http://127.0.0.1:5000';
-    final endpoint = Uri.parse('$base/send-permission-email');
+    // ปรับเป็น backend จริงของคุณ
+    final endpoint = Uri.parse('http://127.0.0.1:5000/send-permission-email');
 
     final res = await http.post(
       endpoint,
@@ -226,24 +211,22 @@ class _PermissionPageState extends State<PermissionPage>
         'to_email': toEmail,
         'link_url': linkUrl,
         'invited_name': invitedName ?? '',
-        'location_name': locationName ?? ' Unknow',
+        'location_name': locationName ?? 'Unknown',
         'subject': 'ยืนยันสิทธิ์เข้าถึง ${locationName ?? ''}'.trim(),
       }),
     );
 
     if (res.statusCode != 200) {
-      debugPrint('ส่งอีเมลล้มเหลว: ${res.body}');
       throw Exception('ส่งอีเมลล้มเหลว: ${res.body}');
     }
   }
-}
 
-/// ===== Utilities (local) =====
-bool _isEmail(String v) {
-  final re = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-  return re.hasMatch(v);
-}
+  bool _isEmail(String v) {
+    final re = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    return re.hasMatch(v);
+  }
 
-void _toast(BuildContext context, String msg) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _toast(BuildContext context, String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
 }

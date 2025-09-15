@@ -171,7 +171,7 @@ class _NotificationPageState extends State<NotificationPage> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: item.color.withOpacity(0.1),
+                        color: item.color.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(item.icon, color: item.color, size: 24),
@@ -304,8 +304,7 @@ class _HoverableNotificationCard extends StatefulWidget {
     required this.item,
     required this.onTap,
     required this.onDelete,
-    Key? key,
-  }) : super(key: key);
+  });
 
   @override
   State<_HoverableNotificationCard> createState() =>
@@ -337,7 +336,7 @@ class _HoverableNotificationCardState
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isHovered ? 0.08 : 0.03),
+                color: Colors.black.withValues(alpha: isHovered ? 0.08 : 0.03),
                 blurRadius: isHovered ? 12 : 4,
                 offset: const Offset(0, 3),
               ),

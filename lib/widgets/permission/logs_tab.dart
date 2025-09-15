@@ -1,3 +1,4 @@
+// lib/widgets/permission/logs_tab.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -22,13 +23,41 @@ class LogsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.watch<PermissionProvider>();
 
-    return FutureBuilder<List<PermissionLog>>(
-      future: p.listLogs(locationId),
+    return FutureBuilder<List<PermissionMember>>(
+      // เดิม fetchMembers(...) -> ใช้ loadMembers(...)
+      future: p.loadMembers(locationId),
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final logs = snap.data!;
+
+        final members = snap.data!;
+        final sorted = [...members]..sort((a, b) {
+          int rank(MemberStatus s) {
+            switch (s) {
+              case MemberStatus.pending:
+              case MemberStatus.invited:
+                return 0;
+              case MemberStatus.confirmed:
+                return 1;
+              case MemberStatus.expired:
+              case MemberStatus.disabled: // ✅ รองรับ disabled
+                return 2;
+              case MemberStatus.revoked:
+              case MemberStatus.left:
+                return 3;
+              case MemberStatus.unknown:
+                return 9;
+            }
+          }
+
+          final r = rank(a.status) - rank(b.status);
+          if (r != 0) return r;
+          final aTs = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bTs = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bTs.compareTo(aTs);
+        });
+
         return Column(
           children: [
             Padding(
@@ -37,7 +66,7 @@ class LogsTab extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'เหตุการณ์ล่าสุด (${logs.length})',
+                      'สถานะสมาชิก/คำเชิญ (${sorted.length})',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
@@ -50,11 +79,11 @@ class LogsTab extends StatelessWidget {
               ),
             ),
             const Divider(height: 1),
-            if (logs.isEmpty)
+            if (sorted.isEmpty)
               const Expanded(
                 child: EmptyState(
                   icon: Icons.event_note,
-                  title: 'ยังไม่มีประวัติ',
+                  title: 'ยังไม่มีข้อมูลสมาชิก',
                   message: 'เมื่อมีการเชิญ/ยืนยัน/เพิกถอนจะแสดงที่นี่',
                 ),
               )
@@ -62,23 +91,29 @@ class LogsTab extends StatelessWidget {
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.all(16),
-                  itemCount: logs.length,
+                  itemCount: sorted.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (_, i) {
-                    final lg = logs[i];
+                    final m = sorted[i];
+                    final permStr = m.permission.label; // owner/edit/view
+
+                    // เดิม when = m.updatedAt ?? m.createdAt;
+                    // ตอนนี้โมเดลมีแค่ createdAt -> ใช้ createdAt ไปก่อน
+                    final when = m.createdAt;
+                    final whenStr = _fmt(when);
+
                     return Card(
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(color: _statusBorderColor(lg.status)),
+                        side: BorderSide(color: _statusBorderColor(m.status)),
                       ),
                       child: ListTile(
-                        leading: StatusDot(status: lg.status),
-                        title: Text('${lg.invitedEmail} • ${lg.permission}'),
-                        subtitle: Text(_logSubtitle(lg)),
+                        leading: StatusDot(status: m.status),
+                        title: Text('${m.email} • $permStr'),
+                        subtitle: Text(_subtitleFor(m, whenStr)),
                         trailing: Text(
-                          DateFormat('yyyy-MM-dd HH:mm')
-                              .format(lg.createdAt.toLocal()),
+                          whenStr,
                           style: const TextStyle(color: Colors.grey),
                         ),
                       ),
@@ -92,18 +127,24 @@ class LogsTab extends StatelessWidget {
     );
   }
 
-  String _logSubtitle(PermissionLog l) {
-    switch (l.status) {
-      case PermissionLogStatus.pending:
-        return 'สถานะ: รอการยืนยัน • ผู้เชิญ: ${l.invitedByEmail} • หมดอายุ: ${_fmt(l.expiredAt)}';
-      case PermissionLogStatus.confirmed:
-        return 'สถานะ: ยืนยันแล้ว • ผู้เชิญ: ${l.invitedByEmail} • ยืนยัน: ${_fmt(l.confirmAt)}';
-      case PermissionLogStatus.expired:
-        return 'สถานะ: หมดอายุ • ผู้เชิญ: ${l.invitedByEmail} • เวลา: ${_fmt(l.expiredAt)}';
-      case PermissionLogStatus.disabled:
-        return 'สถานะ: เพิกถอนแล้ว • ผู้เชิญ: ${l.invitedByEmail} • เวลา: ${_fmt(l.disabledAt)}';
+  String _subtitleFor(PermissionMember m, String whenStr) {
+    switch (m.status) {
+      case MemberStatus.pending:
+      case MemberStatus.invited:
+        return 'สถานะ: รอการยืนยัน • ชื่อ: ${m.name ?? "-"} • สร้างเมื่อ: $whenStr';
+      case MemberStatus.confirmed:
+        return 'สถานะ: ยืนยันแล้ว • ชื่อ: ${m.name ?? "-"} • อัปเดตล่าสุด: $whenStr';
+      case MemberStatus.expired:
+        return 'สถานะ: หมดอายุ • ชื่อ: ${m.name ?? "-"} • เวลา: $whenStr';
+      case MemberStatus.disabled: // ✅ ใหม่
+        return 'สถานะ: ปิดการใช้งาน • ชื่อ: ${m.name ?? "-"} • เวลา: $whenStr';
+      case MemberStatus.revoked:
+        return 'สถานะ: เพิกถอนแล้ว • ชื่อ: ${m.name ?? "-"} • เวลา: $whenStr';
+      case MemberStatus.left:
+        return 'สถานะ: ออกจากกลุ่มแล้ว • ชื่อ: ${m.name ?? "-"} • เวลา: $whenStr';
+      case MemberStatus.unknown:
+        return 'สถานะ: ไม่ทราบ • ชื่อ: ${m.name ?? "-"} • เวลา: $whenStr';
     }
-    return '';
   }
 
   String _fmt(DateTime? dt) {
@@ -111,17 +152,20 @@ class LogsTab extends StatelessWidget {
     return DateFormat('yyyy-MM-dd HH:mm').format(dt.toLocal());
   }
 
-  static Color _statusBorderColor(String status) {
+  static Color _statusBorderColor(MemberStatus status) {
     switch (status) {
-      case PermissionLogStatus.pending:
+      case MemberStatus.pending:
+      case MemberStatus.invited:
         return Colors.amber.shade200;
-      case PermissionLogStatus.confirmed:
+      case MemberStatus.confirmed:
         return Colors.green.shade200;
-      case PermissionLogStatus.expired:
+      case MemberStatus.expired:
+      case MemberStatus.disabled: // ✅ ใหม่
         return Colors.grey.shade300;
-      case PermissionLogStatus.disabled:
+      case MemberStatus.revoked:
+      case MemberStatus.left:
         return Colors.red.shade200;
-      default:
+      case MemberStatus.unknown:
         return Colors.grey.shade200;
     }
   }

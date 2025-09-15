@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static final String baseUrl = 'http://127.0.0.1:5000'; // Desktop/Web (localhost)
-  static http.Client client = http.Client(); // default client ใช้งานจริง
+  // ใช้เฉพาะ Windows → ชี้ localhost
+  static final String baseUrl = 'http://127.0.0.1:5000';
+  static http.Client client = http.Client();
+
+  // ---------- OTP (static) ----------
   static Uri get updatePasswordUrl => Uri.parse('$baseUrl/reset-password');
 
   // ส่ง OTP
@@ -12,18 +15,14 @@ class ApiService {
     final url = Uri.parse('$baseUrl/send-otp');
     try {
       final response = await client.post(
-        // ✅ ใช้ client แทน http
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email}),
       );
-
-      debugPrint('📡 Response status: ${response.statusCode}');
-      debugPrint('📡 Response body: ${response.body}');
-
+      debugPrint('📡 send-otp: ${response.statusCode} ${response.body}');
       return response.statusCode == 200;
     } catch (e) {
-      debugPrint('❌ Error during POST: $e');
+      debugPrint('❌ send-otp error: $e');
       return false;
     }
   }
@@ -33,16 +32,14 @@ class ApiService {
     final url = Uri.parse('$baseUrl/verify-otp');
     try {
       final response = await client.post(
-        // ✅ ใช้ client
         url,
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"email": email, "otp": otp}),
       );
-
-      debugPrint('✅ OTP verify response: ${response.body}');
+      debugPrint('📡 verify-otp: ${response.statusCode} ${response.body}');
       return response.statusCode == 200;
     } catch (e) {
-      debugPrint("❌ OTP verify failed: $e");
+      debugPrint("❌ verify-otp error: $e");
       return false;
     }
   }
@@ -56,12 +53,55 @@ class ApiService {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'new_password': newPassword}),
       );
-
-      debugPrint('🛠️ Reset Password: ${response.statusCode}');
+      debugPrint('📡 reset-password: ${response.statusCode} ${response.body}');
       return response.statusCode == 200;
     } catch (e) {
-      debugPrint('❌ Error resetting password: $e');
+      debugPrint('❌ reset-password error: $e');
       return false;
     }
   }
+
+  // ---------- Detection (instance) ----------
+  Future<void> detectHeartbeat() async {
+    // ส่งภาพ/คำสั่งตรวจจับแบบ manual ถ้าเพิ่ม endpoint ภายหลัง
+    // await ApiService.client.post(...);
+  }
+
+  // ---------- Camera (instance) ----------
+  Future<bool> startCamera(String locationId) async {
+    final url = Uri.parse('$baseUrl/start-camera');
+    try {
+      final res = await ApiService.client.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'location_id': locationId}),
+      );
+      debugPrint('🎥 start-camera: ${res.statusCode} ${res.body}');
+      return res.statusCode == 200;
+    } catch (e) {
+      debugPrint('❌ start-camera error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> stopCamera() async {
+    final url = Uri.parse('$baseUrl/stop-camera');
+    try {
+      final res = await ApiService.client.post(url);
+      debugPrint('🛑 stop-camera: ${res.statusCode} ${res.body}');
+      return res.statusCode == 200;
+    } catch (e) {
+      debugPrint('❌ stop-camera error: $e');
+      return false;
+    }
+  }
+
+  /// URL ภาพล้วนจาก backend
+  String getFrameUrl({int? tick}) {
+    final ts = tick ?? DateTime.now().millisecondsSinceEpoch;
+    return '$baseUrl/frame_raw?ts=$ts';
+  }
+
+  /// alias เผื่อในโค้ดเดิมเคยเรียก frameUrl(...)
+  String frameUrl({int? tick}) => getFrameUrl(tick: tick);
 }

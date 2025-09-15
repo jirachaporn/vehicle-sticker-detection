@@ -1,6 +1,9 @@
+// lib/widgets/sidebar.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/app_state.dart';
+import '../providers/permission_provider.dart'; // ✅ ใช้เช็คสิทธิ์จริง
 import '../screens/sign_in_page.dart';
 
 class Sidebar extends StatelessWidget {
@@ -10,7 +13,6 @@ class Sidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Determine if we should show collapsed sidebar based on screen width
         final bool isCollapsed = MediaQuery.of(context).size.width < 1024;
         final double sidebarWidth = isCollapsed ? 80 : 288;
 
@@ -56,8 +58,12 @@ class Sidebar extends StatelessWidget {
                   padding: EdgeInsets.symmetric(
                     horizontal: isCollapsed ? 8 : 16,
                   ),
-                  child: Consumer<AppState>(
-                    builder: (context, appState, child) {
+                  child: Consumer2<AppState, PermissionProvider>(
+                    builder: (context, appState, perm, child) {
+                      // ✅ อ่านสิทธิ์ตาม location_id ปัจจุบัน
+                      final bool isOwner = appState.isOwnerWith(perm);
+                      final bool canEdit = appState.canEditWith(perm);
+
                       return Column(
                         children: [
                           // Main Menu Items
@@ -73,14 +79,14 @@ class Sidebar extends StatelessWidget {
                             isCollapsed: isCollapsed,
                           ),
 
-                          // Location-specific menu (shown when location is selected)
+                          // Location-specific menu (แสดงเมื่อเลือกสถานที่แล้ว)
                           if (appState.selectedLocation != null) ...[
                             const SizedBox(height: 24),
                             if (!isCollapsed)
                               _buildLocationHeader(appState.selectedLocation!),
                             if (!isCollapsed) const SizedBox(height: 12),
 
-                            // ✅ ทุกคนเห็น Overview
+                            // ทุกสิทธิ์เห็น Overview
                             _buildLocationMenuItem(
                               icon: Icons.dashboard,
                               label: 'Overview',
@@ -90,8 +96,8 @@ class Sidebar extends StatelessWidget {
                               isCollapsed: isCollapsed,
                             ),
 
-                            // ✅ owner และ edit เห็น Stickers
-                            if (appState.hasEditPermission()) ...[
+                            // owner หรือ edit → เห็น Stickers
+                            if (isOwner || canEdit) ...[
                               const SizedBox(height: 8),
                               _buildLocationMenuItem(
                                 icon: Icons.sticky_note_2,
@@ -105,7 +111,7 @@ class Sidebar extends StatelessWidget {
                               ),
                             ],
 
-                            // ✅ ทุกคนเห็น Camera, Notification, Table
+                            // ทุกสิทธิ์เห็น Camera, Notification, Table
                             const SizedBox(height: 8),
                             _buildLocationMenuItem(
                               icon: Icons.camera_alt,
@@ -133,8 +139,8 @@ class Sidebar extends StatelessWidget {
                               isCollapsed: isCollapsed,
                             ),
 
-                            // ✅ Add Permission เฉพาะ owner เท่านั้น
-                            if (appState.isOwner()) ...[
+                            // Owner เท่านั้น → Add Permission
+                            if (isOwner) ...[
                               const SizedBox(height: 8),
                               _buildLocationMenuItem(
                                 icon: Icons.vpn_key,
@@ -197,7 +203,7 @@ class Sidebar extends StatelessWidget {
                 color: isActive
                     ? const Color(0xFF1D4ED8)
                     : isHovered
-                    ? Colors.white.withAlpha((255 * 0.1).round())
+                    ? Colors.white.withValues(alpha: 0.1)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -228,7 +234,6 @@ class Sidebar extends StatelessWidget {
             child: menuItem,
           );
         }
-
         return menuItem;
       },
     );
@@ -249,9 +254,8 @@ class Sidebar extends StatelessWidget {
                 PageRouteBuilder(
                   transitionDuration: const Duration(milliseconds: 100),
                   pageBuilder: (_, __, ___) => const SignInPage(),
-                  transitionsBuilder: (_, animation, __, child) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
+                  transitionsBuilder: (_, animation, __, child) =>
+                      FadeTransition(opacity: animation, child: child),
                 ),
               );
             },
@@ -265,15 +269,15 @@ class Sidebar extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 10),
               decoration: BoxDecoration(
                 color: isHovered
-                    ? Colors.red.withAlpha((255 * 0.8).round())
-                    : Colors.white.withAlpha((255 * 0.1).round()),
+                    ? Colors.red.withValues(alpha: 0.8)
+                    : Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: AnimatedScale(
                 duration: const Duration(milliseconds: 200),
                 scale: isHovered ? 1.05 : 1.0,
                 child: isCollapsed
-                    ? Center(
+                    ? const Center(
                         child: Icon(
                           Icons.logout,
                           color: Colors.white,
@@ -312,13 +316,12 @@ class Sidebar extends StatelessWidget {
             child: signOutButton,
           );
         }
-
         return signOutButton;
       },
     );
   }
 
-  Widget _buildLocationHeader(location) {
+  Widget _buildLocationHeader(dynamic location) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -370,7 +373,7 @@ class Sidebar extends StatelessWidget {
                 color: isActive
                     ? const Color(0xFF1D4ED8)
                     : isHovered
-                    ? Colors.white.withAlpha((255 * 0.1).round())
+                    ? Colors.white.withValues(alpha: 0.1)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -409,7 +412,6 @@ class Sidebar extends StatelessWidget {
             child: menuItem,
           );
         }
-
         return menuItem;
       },
     );

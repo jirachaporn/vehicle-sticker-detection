@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+
 import '../models/location.dart';
+import 'permission_provider.dart'; 
 
 enum AppView {
   home,
@@ -18,8 +20,10 @@ class AppState extends ChangeNotifier {
   Location? _selectedLocation;
   List<Location> _locations = [];
 
-  // ลบออกก่อน deploy production
+  // NOTE: dev only (อย่าลืมลบเมื่อขึ้น prod)
   String loggedInEmail = 'vdowduang@gmail.com';
+
+  /// ใช้คู่กับ PermissionProvider เพื่อเช็คสิทธิ์
   String? locationId;
 
   AppView get currentView => _currentView;
@@ -31,6 +35,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// โหลดรายการสถานที่ที่ผู้ใช้งาน “มีสิทธิ์” จาก backend (ผ่าน location_members)
   Future<void> loadLocations(String email) async {
     final response = await http.get(
       Uri.parse('http://127.0.0.1:5000/locations?user=$email'),
@@ -38,12 +43,8 @@ class AppState extends ChangeNotifier {
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
-      _locations = data
-        .map((json) => Location
-        .fromJson(json))
-        .toList()
+      _locations = data.map((json) => Location.fromJson(json)).toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
       notifyListeners();
     } else {
       throw Exception('Failed to load locations');
@@ -61,14 +62,17 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// เลือกการ์ดสถานที่จากหน้า Home
   void selectLocation(Location location) {
     _selectedLocation = location;
+    locationId = location.id; // ✅ ผูกกับ id สำหรับ PermissionProvider
     _currentView = AppView.overview;
     notifyListeners();
   }
 
   void backToHome() {
     _selectedLocation = null;
+    locationId = null;
     _currentView = AppView.home;
     notifyListeners();
   }
@@ -78,29 +82,21 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-
-  /// ✅ ตรวจสอบว่า logged-in user เป็น owner ของ selected location
-  bool isOwner() {
-    final userEmail = loggedInEmail;
-    final location = _selectedLocation;
-    if (location == null || userEmail.isEmpty) return false;
-
-    return location.ownerEmail == userEmail;
+  bool isOwnerWith(PermissionProvider perm) {
+    final id = locationId;
+    if (id == null || id.isEmpty) return false;
+    return perm.isOwner(id);
   }
 
-  /// ✅ ตรวจสอบว่า logged-in user มีสิทธิ์ "edit" (หรือเป็น owner)
-  bool hasEditPermission() {
-    final userEmail = loggedInEmail;
-    final location = _selectedLocation;
+  bool canEditWith(PermissionProvider perm) {
+    final id = locationId;
+    if (id == null || id.isEmpty) return false;
+    return perm.canEdit(id);
+  }
 
-    if (location == null || userEmail.isEmpty) return false;
-
-    if (location.ownerEmail == userEmail) return true;
-
-    final sharedWith = location.sharedWith;
-    return sharedWith.any(
-      (item) => item['email'] == userEmail && item['permission'] == 'edit',
-    );
-  
+  bool canViewWith(PermissionProvider perm) {
+    final id = locationId;
+    if (id == null || id.isEmpty) return false;
+    return perm.canView(id);
   }
 }

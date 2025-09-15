@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../models/permission.dart';
 
 class PermissionPicker extends StatelessWidget {
+  /// ค่าที่เลือก: "view" | "edit"
   final String value;
   final ValueChanged<String> onChanged;
 
@@ -20,12 +20,12 @@ class PermissionPicker extends StatelessWidget {
         prefixIcon: Icon(Icons.security_outlined),
       ),
       items: const [
-        DropdownMenuItem(
-          value: PermissionType.view,
+        DropdownMenuItem<String>(
+          value: 'view',
           child: Text('Viewer (ดูอย่างเดียว)'),
         ),
-        DropdownMenuItem(
-          value: PermissionType.edit,
+        DropdownMenuItem<String>(
+          value: 'edit',
           child: Text('Editor (ดู+แก้ไข/อัปโหลด)'),
         ),
       ],

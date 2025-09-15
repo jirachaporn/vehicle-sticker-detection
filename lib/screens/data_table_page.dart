@@ -101,7 +101,7 @@ class _DataTablePageState extends State<DataTablePage> {
     child: Row(
       children: [
         Expanded(
-          flex: 6,
+          flex: 8,
           child: TextField(
             controller: _searchController,
             decoration: InputDecoration(
@@ -128,7 +128,7 @@ class _DataTablePageState extends State<DataTablePage> {
 
         // 🔽 Dropdown
         Expanded(
-          flex: 2,
+          flex: 1,
           child: SizedBox(
             height: 48,
             child: Container(
@@ -157,28 +157,6 @@ class _DataTablePageState extends State<DataTablePage> {
                 ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(width: 16),
-
-        // 📁 Export CSV Button
-        SizedBox(
-          height: 48,
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.download),
-            label: const Text("Export CSV"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF11A64E),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              textStyle: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            onPressed: () {
-              // TODO: Add CSV export logic
-            },
           ),
         ),
       ],

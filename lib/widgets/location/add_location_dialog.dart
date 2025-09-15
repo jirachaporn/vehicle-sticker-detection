@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -21,9 +20,9 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
   final _descriptionController = TextEditingController();
-  Color _selectedColor = Colors.blue;
+   Color? _selectedColor;
 
-  final List<Color> _colorOptions = [
+  final List<Color> _colorOptions = const [
     Color(0xFF1565C0),
     Color(0xFFC62828),
     Color(0xFF2E7D32),
@@ -43,24 +42,38 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
       _addressController.text = initial.address;
       _descriptionController.text = initial.description ?? '';
       _selectedColor = initial.color;
+      } else {
+      _selectedColor = null; 
     }
+    
   }
 
   bool _canSave() {
-    return _nameController.text.isNotEmpty &&
-        _addressController.text.isNotEmpty;
+    return _nameController.text.trim().isNotEmpty &&
+        _addressController.text.trim().isNotEmpty &&
+        _selectedColor != null;
   }
 
-  void _handleSave() async {
+  String _toWebHex(Color c) {
+    final rgb = (c.value & 0xFFFFFF)
+        .toRadixString(16)
+        .padLeft(6, '0')
+        .toUpperCase();
+    return '#$rgb';
+  }
+
+  Future<void> _handleSave() async {
     final appState = context.read<AppState>();
     final isEdit = widget.initialLocation != null;
 
+  final pickedColor = _selectedColor!;
     final locationData = {
-      "name": _nameController.text,
-      "address": _addressController.text,
-      "color": '0x${_selectedColor.value.toRadixString(16).toUpperCase()}',
-      "description":
-          _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
+      "name": _nameController.text.trim(),
+      "address": _addressController.text.trim(),
+      "color": _toWebHex(pickedColor), 
+      "description": _descriptionController.text.trim().isNotEmpty
+          ? _descriptionController.text.trim()
+          : null,
       "owner_email": appState.loggedInEmail,
       "shared_with": widget.initialLocation?.sharedWith ?? [],
     };
@@ -87,9 +100,12 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
       if (response.statusCode == 200 || response.statusCode == 201) {
         await appState.loadLocations(appState.loggedInEmail);
         Navigator.of(context).pop();
-        showSuccessMessage(context, isEdit
-            ? 'Location updated successfully!'
-            : 'Location added successfully!');
+        showSuccessMessage(
+          context,
+          isEdit
+              ? 'Location updated successfully!'
+              : 'Location added successfully!',
+        );
       } else {
         final error = jsonDecode(response.body);
         showFailMessage(context, 'Failed', error["message"] ?? 'Unknown error');
@@ -109,7 +125,11 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
     super.dispose();
   }
 
-  void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
+  void showFailMessage(
+    BuildContext context,
+    String errorMessage,
+    dynamic error,
+  ) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         elevation: 0,
@@ -172,7 +192,10 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                 children: [
                   Text(
                     isEdit ? 'Edit Location' : 'Add New Location',
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const Spacer(),
                   IconButton(
@@ -182,35 +205,82 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                 ],
               ),
               const SizedBox(height: 32),
+
+              // Location Name *
               TextField(
                 controller: _nameController,
                 decoration: InputDecoration(
-                  labelText: 'Location Name',
+                  label: RichText(
+                    text: TextSpan(
+                      text: 'Location Name',
+                      style: TextStyle(color: Colors.grey[700], fontSize: 16),
+                      children: const [
+                        TextSpan(
+                          text: ' *',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   hintText: 'e.g., ABC Apartment',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
                   contentPadding: const EdgeInsets.all(16),
                 ),
+                onChanged: (_) => setState(() {}), // อัปเดตปุ่ม Save
               ),
               const SizedBox(height: 24),
+
+              // Address *
               TextField(
                 controller: _addressController,
                 maxLines: 3,
                 decoration: InputDecoration(
-                  labelText: 'Address',
+                  label: RichText(
+                    text: TextSpan(
+                      text: 'Address',
+                      style: TextStyle(color: Colors.grey[700], fontSize: 16),
+                      children: const [
+                        TextSpan(
+                          text: ' *',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   hintText: 'Full address',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
                   contentPadding: const EdgeInsets.all(16),
                 ),
+                onChanged: (_) => setState(() {}), // อัปเดตปุ่ม Save
               ),
               const SizedBox(height: 24),
+
+              // Description (optional)
               TextField(
                 controller: _descriptionController,
                 decoration: InputDecoration(
-                  labelText: 'Description (optional)',
+                  label: RichText(
+                    text: TextSpan(
+                      text: 'Description',
+                      style: TextStyle(color: Colors.grey[700], fontSize: 16),
+                      children: const [
+                        TextSpan(
+                          text: ' (optional)',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
                   hintText: 'Additional details',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -219,18 +289,33 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                 ),
               ),
               const SizedBox(height: 24),
+
+              // Color (label with TextSpan)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Color',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  RichText(
+                    text: TextSpan(
+                      text: 'Color',
+                      style: TextStyle(color: Colors.grey[700], fontSize: 16),
+                      children: const [
+                        TextSpan(
+                          text: ' *',
+                          style: TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 12,
                     runSpacing: 12,
                     children: _colorOptions.map((color) {
+                      final selected = _selectedColor == color;
                       return GestureDetector(
                         onTap: () => setState(() => _selectedColor = color),
                         child: Stack(
@@ -243,15 +328,19 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                                 color: color,
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: _selectedColor == color
+                                  color: selected
                                       ? Colors.black45
                                       : Colors.transparent,
                                   width: 3,
                                 ),
                               ),
                             ),
-                            if (_selectedColor == color)
-                              const Icon(Icons.check, color: Colors.white, size: 24),
+                            if (selected)
+                              const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                           ],
                         ),
                       );
@@ -259,7 +348,9 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                   ),
                 ],
               ),
+
               const SizedBox(height: 40),
+
               Row(
                 children: [
                   Expanded(

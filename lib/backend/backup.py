@@ -13,6 +13,7 @@ import cloudinary.uploader
 from datetime import datetime
 import pytz, cv2, requests, torch, httpx
 import numpy as np
+import time
 
 
 load_dotenv()
@@ -55,12 +56,48 @@ executor = ThreadPoolExecutor(max_workers=3)
 smtp_lock = threading.Lock()
 smtp_pool = []
 
-camera = None
+# ===== Multi-cam first state =====
+
+# โมเดล/ดีเทคชัน
 current_model = None
-model_type = None               # "roboflow" | "local"
+model_type = None               # "local" (ใช้ .pt) | "roboflow" (ถ้ามีในอนาคต)
 active_model_url = None
-RF_MIN_CONF = float(os.getenv("RF_MIN_CONF", "0.25"))  # ปรับ threshold ได้จาก .env
-_JPEG_QUALITY_RF = 85  # คมขึ้นตอนส่งให้โมเดล (รักษารายละเอียด)
+RF_MIN_CONF = float(os.getenv("RF_MIN_CONF", "0.25"))
+_JPEG_QUALITY_RF = 85
+
+# เธรดฝั่งตรวจจับ
+detector_stop = threading.Event()
+detector_thread = None
+current_location_id = None
+
+# ---- Multi-cam collections ----
+# key = index ของอุปกรณ์ webcam ใน OpenCV (0,1,2,...)
+cameras = {}                    # {cam_id: cv2.VideoCapture}
+display_threads = {}            # {cam_id: Thread}
+display_stops = {}              # {cam_id: Event}
+
+latest_frame_map = {}           # {cam_id: np.ndarray | None}
+latest_jpeg_map  = {}           # {cam_id: bytes | None}
+latest_ts_map    = {}           # {cam_id: float}
+latest_lock = threading.Lock()
+
+primary_cam_id = None           # กล้องหลัก (ถ้าจะให้ detector ใช้ตัวเดียว)
+
+# ---- Legacy aliases (ให้โค้ดเดิมยังรันได้ระหว่างเปลี่ยนเป็น multi-cam) ----
+latest_frame = None             # จะถูกอัปเดตจาก cam หลัก (ถ้าจำเป็น)
+latest_jpeg  = None
+latest_ts    = 0.0
+latest_gen   = 0                # เพิ่มทุกครั้งที่ start-camera ใหม่
+
+# ---- ค่าปรับสำหรับการแสดงผล ----
+DISPLAY_FPS = 60                # 45–60 ก็พอสำหรับ USB cam ส่วนใหญ่
+JPEG_QUALITY_DISPLAY = 60       # 0–100 เท่านั้น (60–85 คือ sweet spot)
+TARGET_DISPLAY_WIDTH = 640
+
+# ไม่ enhance/ไม่ใส่ timestamp ที่ฝั่งแสดงผล (ให้ฝั่งตรวจจับทำเองถ้าต้องการ)
+APPLY_ENHANCE_FOR_DISPLAY = False
+DRAW_TS_ON_DISPLAY = False
+
 
 def _corsify(response):
     response.headers.add("Access-Control-Allow-Origin", "*")
@@ -302,9 +339,6 @@ def send_permission_link_email(
 
 
 # ---------- (ออปชัน) Endpoint สำหรับทดสอบส่งเมล ----------
-from email.mime.text import MIMEText
-from email.header import Header
-
 @app.post("/send-permission-email")
 def send_permission_email_endpoint():
     data = request.get_json(silent=True) or {}
@@ -555,50 +589,45 @@ def reset_password():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-
-
 @app.route("/locations", methods=["GET"])
 def get_locations():
     user_email = request.args.get("user")
-
     if not user_email:
         return jsonify({"error": "User email is required"}), 400
 
     try:
-        print(f"🔍 Fetching locations for user: {user_email}")
+        print(f"🔍 Fetching locations (via location_members) for: {user_email}")
 
-        # 1. Owner
-        owned_result = supabase.table("locations") \
-            .select("*") \
-            .eq("owner_email", user_email) \
+        # 1) หา location_id ที่ user เป็นสมาชิกและยืนยันแล้ว
+        mem_res = supabase.table("location_members") \
+            .select("location_id") \
+            .eq("member_email", user_email) \
+            .eq("member_status", "confirmed") \
+            .execute()
+
+        memberships = mem_res.data or []
+        loc_ids = [m.get("location_id") for m in memberships if m.get("location_id")]
+        if not loc_ids:
+            return jsonify([]), 200
+
+        # 2) ดึงรายละเอียดสถานที่ตาม loc_ids (ใช้ชื่อคอลัมน์ตามสคีมาใหม่)
+        loc_res = supabase.table("locations") \
+            .select("location_id, location_name, location_address, location_description, location_color, created_at") \
+            .in_("location_id", loc_ids) \
             .order("created_at", desc=True) \
             .execute()
 
-        # 2. Shared
-        shared_result = supabase.table("locations") \
-            .select("*") \
-            .contains("shared_with", json.dumps([{"email": user_email}])) \
-            .order("created_at", desc=True) \
-            .execute()
+        locations = loc_res.data or []
 
-        # 3. Merge and deduplicate
-        unique = {}
-        for loc in (owned_result.data or []) + (shared_result.data or []):
-            loc_id = loc.get("locations_id")  # ✅ uuid
-            if loc_id and loc_id not in unique:
-                unique[loc_id] = loc
-
-        # 4. Build response
+        # 3) สร้าง response (คง key เดิม 'locations_id' ถ้า frontend ใช้อยู่)
         result = []
-        for loc in unique.values():
+        for loc in locations:
             result.append({
-                "locations_id": loc.get("locations_id"),
+                "locations_id": loc.get("location_id"),                # alias ให้เหมือนของเดิม
                 "name": loc.get("location_name"),
-                "address": loc.get("address"),
-                "description": loc.get("description"),
-                "color": loc.get("color"),
-                "owner_email": loc.get("owner_email"),
-                "shared_with": loc.get("shared_with", []),
+                "address": loc.get("location_address"),
+                "description": loc.get("location_description"),
+                "color": loc.get("location_color"),
                 "created_at": loc.get("created_at"),
             })
 
@@ -606,7 +635,7 @@ def get_locations():
         return jsonify(result), 200
 
     except Exception as e:
-        print(f"🔥 ERROR during /locations:", e)
+        print("🔥 ERROR during /locations:", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -772,91 +801,184 @@ def upload_sticker_model():
         return jsonify({"error": str(e)}), 500
 
 
+def _try_open_camera_on_index(index: int):
+    """ลองเปิดกล้องด้วย backend หลายแบบบน Windows ตาม index ที่ระบุ"""
+    backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, None]
+    for be in backends:
+        try:
+            cap = cv2.VideoCapture(index, be) if be is not None else cv2.VideoCapture(index)
+            if not cap.isOpened():
+                try: cap.release()
+                except: pass
+                continue
 
-# --- ปรับ /start-camera ให้ใช้ CAP_DSHOW + ตั้งความละเอียด + วอร์มอัพ ---
+            # flush buffer
+            for _ in range(10):
+                ok, _ = cap.read()
+                if not ok:
+                    break
+
+            ok, img = cap.read()
+            if ok and img is not None and img.size > 0:
+                return cap, be
+            cap.release()
+        except Exception as e:
+            print(f"⚠️ open camera index={index} with backend {be} failed: {e}")
+    return None, None
+
+
+def _probe_cameras(max_index: int = 8) -> list[int]:
+    """สแกนหา index 0..max_index ที่เปิดได้จริง"""
+    found = []
+    for i in range(max_index + 1):
+        cap, _ = _try_open_camera_on_index(i)
+        if cap is not None:
+            found.append(i)
+            cap.release()
+    return found
+
+
+@app.get("/list-cameras")
+def list_cameras():
+    """คืนลิสต์ index ของกล้องที่เปิดได้ (ดีฟอลต์ตัด index 0 ออกเพื่อหลีกเลี่ยงกล้องโน้ตบุ๊ก)"""
+    usb_only = request.args.get("usb_only", "1") == "1"
+    found = _probe_cameras(8)
+    cams = [i for i in found if (not usb_only or i != 0)] or found
+    return _corsify(jsonify({"available": cams}))
+
+
+
 @app.route("/start-camera", methods=["POST", "OPTIONS"])
 def start_camera():
     if request.method == "OPTIONS":
         return _corsify(make_response(("", 200)))
 
-    global camera, current_model, model_type, active_model_url, _frame_idx
+    global detector_thread, detector_stop, current_location_id
+    global primary_cam_id, latest_gen
 
     data = request.get_json() or {}
     location_id = data.get("location_id")
+    cam_indices = data.get("camera_indices")            # optional: [1,2,...]
+    usb_only    = bool(data.get("usb_only", True))      # ดีฟอลต์ True = ตัด 0 ทิ้ง
+
     if not location_id:
         return _corsify(jsonify({"error": "location_id is required"})), 400
 
-    # หา active model
-    model_res = supabase.table("model") \
-        .select("model_name, model_url") \
-        .eq("location_id", location_id) \
-        .eq("is_active", True) \
-        .limit(1).execute()
-    if not model_res.data:
-        return _corsify(jsonify({"error": "No active model for this location"})), 404
-
-    row = model_res.data[0]
-    db_model_name = (row.get("model_name") or "").strip()
-    db_model_url = (row.get("model_url") or "").strip()
-
-    # ปล่อยกล้องเก่า
+    # --- เช็กโมเดล is_active (คง logic เดิมไว้ตามไฟล์ปัจจุบันของคุณ) ---
     try:
-        if camera is not None and camera.isOpened():
-            camera.release()
-    except:
+        model_res = (
+            supabase.table("model")
+            .select("model_url")
+            .eq("location_id", location_id)
+            .eq("is_active", True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        return _corsify(jsonify({"error": f"DB error: {e}"})), 500
+
+    if not model_res.data or not (model_res.data[0].get("model_url") or "").strip():
+        return _corsify(jsonify({
+            "error": "No active model for this location.",
+            "code": "NO_ACTIVE_MODEL"
+        })), 401
+
+    # --- เลือกกล้องที่จะเปิด ---
+    if not cam_indices:
+        probed = _probe_cameras(8)
+        cam_indices = [i for i in probed if (not usb_only or i != 0)] or probed
+    if not cam_indices:
+        return _corsify(jsonify({"error": "No webcam found"})), 404
+
+    # --- ปิดของเก่าทั้งหมด (display threads + cameras) ---
+    for ev in list(display_stops.values()):
+        try: ev.set()
+        except: pass
+    for th in list(display_threads.values()):
+        try:
+            if th and th.is_alive():
+                th.join(timeout=1)
+        except: pass
+    display_threads.clear()
+    display_stops.clear()
+
+    for cid, cap in list(cameras.items()):
+        try:
+            if cap and cap.isOpened():
+                cap.release()
+        except: pass
+        cameras.pop(cid, None)
+
+    # --- เปิดทุกกล้องตามรายการ + ตั้งค่า ---
+    opened = []
+    for idx in cam_indices:
+        cap, be = _try_open_camera_on_index(idx)
+        if cap is None:
+            print(f"⚠️ open camera {idx} failed"); continue
+
+        # พยายาม 1280x720@60 ถ้าไม่ไหวลดเป็น 640x480@60
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_FPS, 60)
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS) or 0
+        except Exception:
+            fps = 0
+        if fps < 59:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_FPS, 60)
+
+        for _ in range(12):  # flush หลังตั้งค่า
+            cap.read()
+
+        cameras[idx] = cap
+        display_stops[idx] = threading.Event()
+        th = threading.Thread(target=display_worker, args=(idx,), daemon=True)
+        th.start()
+        display_threads[idx] = th
+        opened.append(idx)
+        print(f"✅ Camera opened index={idx}, backend={be}")
+
+    if not opened:
+        return _corsify(jsonify({"error": "Unable to open any webcam"})), 500
+
+    # กล้องหลัก (สำหรับ detector) = ตัวแรกในลิสต์
+    primary_cam_id = opened[0]
+
+    # รีเซ็ตบัฟเฟอร์ภาพทั้งหมด
+    with latest_lock:
+        for cid in opened:
+            latest_frame_map[cid] = None
+            latest_jpeg_map[cid]  = None
+            latest_ts_map[cid]    = 0.0
+        latest_gen += 1
+
+    current_location_id = location_id
+
+    # รีสตาร์ต detection worker
+    try:
+        if detector_thread and detector_thread.is_alive():
+            detector_stop.set()
+            detector_thread.join(timeout=1)
+    except Exception:
         pass
+    detector_stop = threading.Event()
+    detector_thread = threading.Thread(target=detection_worker, daemon=True)
+    detector_thread.start()
 
-    # เปิดกล้อง
-    camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    if not camera.isOpened():
-        return _corsify(jsonify({"error": "Unable to access webcam"})), 500
+    base = request.host_url.rstrip("/")
+    streams = [f"{base}/frame_raw?cam={cid}" for cid in opened]
 
-    camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-    camera.set(cv2.CAP_PROP_FPS, 30)
+    return _corsify(jsonify({
+        "message": "Cameras started",
+        "opened": opened,
+        "streams": streams,
+        "location_id": current_location_id,
+        "generation": latest_gen
+    })), 200
 
-    # warmup
-    for _ in range(8):
-        camera.read()
 
-    # ตัดสินใจใช้ RF หรือ local
-    active_model_url = None
-    current_model = None
-    model_type = None
-    if db_model_url:
-        if "detect.roboflow.com" in db_model_url:
-            if "api_key=" not in db_model_url:
-                if not ROBOFLOW_API_KEY:
-                    return _corsify(jsonify({"error": "ROBOFLOW_API_KEY is missing in .env"})), 500
-                sep = "&" if "?" in db_model_url else "?"
-                active_model_url = f"{db_model_url}{sep}api_key={ROBOFLOW_API_KEY}"
-            else:
-                active_model_url = db_model_url
-            model_type = "roboflow"
-        else:
-            if torch is None:
-                return _corsify(jsonify({"error": "PyTorch is not available for local .pt"})), 500
-            try:
-                with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as tmp:
-                    urllib.request.urlretrieve(db_model_url, tmp.name)
-                    current_model = torch.hub.load('ultralytics/yolov5', 'custom', path=tmp.name)
-                model_type = "local"
-            except Exception as e:
-                return _corsify(jsonify({"error": f"Failed to download/load model: {e}"})), 500
-    elif db_model_name:
-        if not ROBOFLOW_API_KEY:
-            return _corsify(jsonify({"error": "ROBOFLOW_API_KEY is missing in .env"})), 500
-        active_model_url = f"{ROBOFLOW_BASE_URL}/{db_model_name}?api_key={ROBOFLOW_API_KEY}"
-        model_type = "roboflow"
-    else:
-        return _corsify(jsonify({"error": "No model_url or model_name provided"})), 500
-
-    # ถ้าใช้ RF ลดความถี่ดึงเฟรมลงอีกนิด
-    global _infer_every
-    _infer_every = 3 if model_type == "roboflow" else 1
-    _frame_idx = 0
-
-    return _corsify(jsonify({"message": "Camera started", "model_type": model_type})), 200
 
 # ------------------------- STOP CAMERA ----------------------------------------
 @app.route("/stop-camera", methods=["POST", "OPTIONS"])
@@ -864,89 +986,193 @@ def stop_camera():
     if request.method == "OPTIONS":
         return _corsify(make_response(("", 200)))
 
-    global camera, current_model, model_type, active_model_url
-    try:
-        if camera is not None and camera.isOpened():
-            camera.release()
-    except:
-        pass
-    camera = None
-    current_model = None
-    model_type = None
-    active_model_url = None
-    return _corsify(jsonify({"message": "Camera stopped"})), 200
+    global primary_cam_id, detector_thread
 
-# --------------------------- FRAME --------------------------------------------
-@app.route("/frame", methods=["GET", "OPTIONS"])
-def frame():
+    # stop display threads
+    for ev in list(display_stops.values()):
+        try: ev.set()
+        except: pass
+    for th in list(display_threads.values()):
+        try:
+            if th and th.is_alive():
+                th.join(timeout=1)
+        except: pass
+    display_threads.clear()
+    display_stops.clear()
+
+    # release cameras
+    for cid, cap in list(cameras.items()):
+        try:
+            if cap and cap.isOpened():
+                cap.release()
+        except: pass
+        cameras.pop(cid, None)
+
+    # stop detection worker
+    try:
+        detector_stop.set()
+        if detector_thread and detector_thread.is_alive():
+            detector_thread.join(timeout=1)
+    except Exception:
+        pass
+    detector_thread = None
+
+    # clear buffers
+    with latest_lock:
+        latest_frame_map.clear()
+        latest_jpeg_map.clear()
+        latest_ts_map.clear()
+
+    primary_cam_id = None
+
+    # reset model/session flags (คงตามไฟล์เดิมของคุณ)
+    # current_model = None; model_type = None; active_model_url = None
+    # current_location_id = None
+
+    return _corsify(jsonify({"message": "Cameras stopped"})), 200
+
+
+def display_worker(cam_id: int):
+    """
+    อ่านกล้อง cam_id → resize → (optional enhance) → encode JPEG
+    อัปเดต latest_*_map[cam_id]; ถ้าเป็น cam หลัก อัปเดต alias legacy ด้วย
+    """
+    fps_interval = 1.0 / max(1.0, DISPLAY_FPS)
+
+    while not display_stops[cam_id].is_set():
+        try:
+            cap = cameras.get(cam_id)
+            if cap is None or not cap.isOpened():
+                time.sleep(0.02); continue
+
+            ok, img = cap.read()
+            if not ok or img is None or img.size == 0:
+                time.sleep(0.005); continue
+
+            h, w = img.shape[:2]
+            if TARGET_DISPLAY_WIDTH > 0 and w > TARGET_DISPLAY_WIDTH:
+                r = TARGET_DISPLAY_WIDTH / float(w)
+                img = cv2.resize(img, (TARGET_DISPLAY_WIDTH, int(h*r)), interpolation=cv2.INTER_AREA)
+
+            disp = enhance_lowlight(img) if APPLY_ENHANCE_FOR_DISPLAY else img
+
+            ok2, buf = cv2.imencode(".jpg", disp, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY_DISPLAY])
+            if ok2:
+                now = time.time()
+                with latest_lock:
+                    latest_frame_map[cam_id] = disp
+                    latest_jpeg_map[cam_id]  = buf.tobytes()
+                    latest_ts_map[cam_id]    = now
+                    # อัปเดต alias legacy ให้โค้ดเก่าไม่พัง (ใช้ cam หลักเท่านั้น)
+                    if primary_cam_id == cam_id:
+                        global latest_frame, latest_jpeg, latest_ts
+                        latest_frame = disp
+                        latest_jpeg  = latest_jpeg_map[cam_id]
+                        latest_ts    = now
+
+            time.sleep(fps_interval)
+
+        except Exception as e:
+            print(f"display worker error (cam {cam_id}):", e)
+            time.sleep(0.01)
+
+
+
+# --- NEW: background detection worker (no overlay on image) ---
+def detection_worker():
+    """
+    ดึงภาพจากกล้องหลัก (primary_cam_id) ผ่าน latest_frame_map แล้วทำ inference
+    """
+    global model_type, active_model_url, current_model, current_location_id
+
+    while not detector_stop.is_set():
+        try:
+            with latest_lock:
+                pid = primary_cam_id
+                img = None if pid is None else latest_frame_map.get(pid)
+                img = None if img is None else img.copy()
+
+            if img is None:
+                time.sleep(0.02)
+                continue
+
+            enhanced = enhance_lowlight(img)
+
+            if model_type == "roboflow" and active_model_url:
+                rf_url = f"{active_model_url}&confidence={RF_MIN_CONF}&overlap=20"
+                _, buf = cv2.imencode(".jpg", enhanced, [int(cv2.IMWRITE_JPEG_QUALITY), _JPEG_QUALITY_RF])
+                b64 = base64.b64encode(buf).decode("utf-8")
+                r = requests.post(rf_url, json={"image": b64}, timeout=8)
+                _ = r.json().get("predictions", [])
+                # TODO: บันทึกผลตามต้องการ
+
+            elif model_type == "local" and current_model is not None:
+                _ = current_model(enhanced)
+                # TODO: แปลงผล/บันทึก
+
+            time.sleep(0.20)  # ~5Hz
+
+        except Exception as e:
+            print("infer worker error:", e)
+            time.sleep(0.2)
+
+
+
+
+@app.route("/frame_raw", methods=["GET", "OPTIONS"])
+def frame_raw():
+    """
+    ส่ง JPEG เฟรมล่าสุดของกล้องที่เลือก (?cam=<id>)
+    รองรับ min_ts/min_gen และรอสั้นๆ เพื่อให้ได้เฟรมสด
+    """
     if request.method == "OPTIONS":
         return _corsify(make_response(("", 200)))
 
-    global camera, current_model, model_type, active_model_url, _frame_idx
-
-    if camera is None or not camera.isOpened():
-        return _corsify(jsonify({"error": "Camera not running"})), 400
-
-    ok, img = camera.read()
-    if not ok or img is None:
-        black = np.zeros((480, 640, 3), dtype=np.uint8)
-        cv2.putText(black, "No frame from camera", (20, 240),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-        ok2, jpeg2 = cv2.imencode(".jpg", black, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-        resp = make_response(jpeg2.tobytes(), 200)
+    def _jpeg_resp(b: bytes, generation=None):
+        resp = make_response(b, 200)
         resp.mimetype = "image/jpeg"
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        if generation is not None:
+            resp.headers["X-Frame-Generation"] = str(generation)
         return _corsify(resp)
 
-    # ---------- ปรับแสงก่อนวิเคราะห์ ----------
-    enhanced = enhance_lowlight(img)
-
-    annotated = enhanced.copy()
-    ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    cv2.putText(annotated, f"TS: {ts}", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-
-    # ทำ inference เฉพาะทุก N เฟรม (ลดภาระ)
-    _frame_idx = (_frame_idx + 1) % _infer_every
-    do_infer = (_frame_idx == 0)
+    try:
+        cam_id = int(request.args.get("cam", str(primary_cam_id if primary_cam_id is not None else 0)))
+    except Exception:
+        cam_id = primary_cam_id if primary_cam_id is not None else 0
 
     try:
-        if do_infer and model_type == "roboflow" and active_model_url:
-            # เพิ่มพารามิเตอร์ Roboflow: confidence ต่ำลง + overlap
-            rf_url = f"{active_model_url}&confidence={RF_MIN_CONF}&overlap=20"
-            # เข้ารหัสภาพคุณภาพสูงขึ้นตอนส่งให้โมเดล
-            _, buf = cv2.imencode(".jpg", enhanced, [int(cv2.IMWRITE_JPEG_QUALITY), _JPEG_QUALITY_RF])
-            b64 = base64.b64encode(buf).decode("utf-8")
-            r = requests.post(rf_url, json={"image": b64}, timeout=8)
-            preds = r.json().get("predictions", [])
+        min_ts = float(request.args.get("min_ts", "0"))
+    except Exception:
+        min_ts = 0.0
 
-            if preds:
-                for p in preds:
-                    x, y = int(p["x"]), int(p["y"])
-                    w, h = int(p["width"]), int(p["height"])
-                    label = p.get("class", "obj")
-                    conf = p.get("confidence", 0)
-                    cv2.rectangle(annotated, (x - w//2, y - h//2), (x + w//2, y + h//2), (0, 255, 0), 2)
-                    cv2.putText(annotated, f"{label} {conf:.2f}",
-                                (x - w//2, y - h//2 - 6),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-            else:
-                cv2.putText(annotated, "no predictions", (10, 60),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
+    try:
+        min_gen = int(request.args.get("min_gen", "0"))
+    except Exception:
+        min_gen = 0
 
-        elif do_infer and model_type == "local" and current_model is not None:
-            results = current_model(enhanced)
-            annotated = results.render()[0]
-            cv2.putText(annotated, f"TS: {ts}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+    max_wait_sec = 0.30
+    staleness_limit = 0.5
+    deadline = time.time() + max_wait_sec
 
-    except Exception as e:
-        cv2.putText(annotated, f"infer err: {e}", (10, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+    while time.time() < deadline:
+        with latest_lock:
+            data = latest_jpeg_map.get(cam_id)
+            ts   = latest_ts_map.get(cam_id, 0.0)
+            gen  = latest_gen
 
-    ok3, jpeg = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
-    resp = make_response(jpeg.tobytes(), 200)
-    resp.mimetype = "image/jpeg"
-    return _corsify(resp)
+        if (data and ts > min_ts and gen >= min_gen and (time.time() - ts) <= staleness_limit):
+            return _jpeg_resp(data, gen)
+        time.sleep(0.01)
+
+    # fallback: placeholder
+    black = np.zeros((480, 640, 3), dtype=np.uint8)
+    cv2.putText(black, f"WAITING... CAM {cam_id}", (50, 240),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+    ok2, jpg = cv2.imencode(".jpg", black, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+    return _jpeg_resp(jpg.tobytes() if ok2 else black.tobytes())
 
 
 

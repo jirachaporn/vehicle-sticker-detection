@@ -7,15 +7,15 @@ import 'package:collection/collection.dart';
 import '../widgets/snackbar/fail_snackbar.dart';
 import '../widgets/loading.dart';
 
-class UploadScreen extends StatefulWidget {
+class UploadPage extends StatefulWidget {
   final String locationId;
-  const UploadScreen({super.key, required this.locationId});
+  const UploadPage({super.key, required this.locationId});
 
   @override
-  State<UploadScreen> createState() => _UploadScreenState();
+  State<UploadPage> createState() => _UploadPageState();
 }
 
-class _UploadScreenState extends State<UploadScreen> {
+class _UploadPageState extends State<UploadPage> {
   bool isUploading = false;
   List<StickerModel> models = [];
   bool isLoading = true;
@@ -53,7 +53,7 @@ class _UploadScreenState extends State<UploadScreen> {
     setState(() {
       models = fetched;
       isLoading = false;
-      debugPrint('📦 Models fetched in UploadScreen: ${models.length}');
+      debugPrint('📦 Models fetched in UploadPage: ${models.length}');
       for (final m in models) {
         debugPrint(
           '📦 Model: ${m.name},${m.id}, isActive: ${m.isActive}, status: ${m.status}',

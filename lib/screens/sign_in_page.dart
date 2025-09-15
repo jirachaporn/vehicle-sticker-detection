@@ -9,7 +9,7 @@ import '../widgets/snackbar/fail_snackbar.dart';
 import '../widgets/snackbar/success_snackbar.dart';
 import 'forgot_password_page.dart';
 import 'sign_up_page.dart';
-import 'main_screen.dart';
+import 'main_page.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -180,7 +180,7 @@ class _SignInPageState extends State<SignInPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => MainScreen(
+          builder: (_) => MainPage(
             username: resolvedUsername,
             email: loginEmail,
             colorHex: resolvedColor,

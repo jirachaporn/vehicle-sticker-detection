@@ -1,11 +1,13 @@
 // lib/widgets/location_card.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/location.dart';
+import '../../providers/permission_provider.dart';
 
-/// LocationCard (คุม overflow ในจอเล็ก + ปุ่มแก้ไข/ลบบนมุมขวาบนเหมือนเดิม)
 class LocationCard extends StatefulWidget {
   final Location location;
   final VoidCallback onTap;
+  // คงพารามิเตอร์ไว้เพื่อความเข้ากันได้ แต่ไม่ใช้เช็คสิทธิ์
   final String loggedInEmail;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
@@ -26,15 +28,57 @@ class LocationCard extends StatefulWidget {
 class _LocationCardState extends State<LocationCard> {
   bool isHovered = false;
 
-  bool get isOwner => widget.location.ownerEmail == widget.loggedInEmail;
+  bool _isOwner = false;
+  bool _canEdit = false;
+  bool _loadingPerm = true;
 
-  bool get canEdit {
-    if (isOwner) return true;
-    final shared = widget.location.sharedWith;
-    return shared.any(
-      (item) =>
-          item['email'] == widget.loggedInEmail && item['permission'] == 'edit',
-    );
+  @override
+  void initState() {
+    super.initState();
+    // โหลดหลังเฟรมแรก เพื่อให้ context อยู่ใต้ Provider แน่ๆ
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPermissions());
+  }
+
+  @override
+  void didUpdateWidget(covariant LocationCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.location.id != widget.location.id ||
+        oldWidget.loggedInEmail.toLowerCase() !=
+            widget.loggedInEmail.toLowerCase()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadPermissions());
+    }
+  }
+
+  Future<void> _loadPermissions() async {
+    if (!mounted) return;
+    setState(() => _loadingPerm = true);
+    try {
+      final perm = context.read<PermissionProvider>();
+      final String locationId = widget.location.id;
+
+      // ✅ เปลี่ยนจาก fetchMembers เป็น loadMembers
+      await perm.loadMembers(locationId);
+
+      final bool isOwner = perm.isOwner(locationId);
+      final bool canEdit = perm.canEdit(locationId);
+
+      debugPrint('PERM | loc=$locationId, owner=$isOwner, edit=$canEdit');
+
+      if (!mounted) return;
+      setState(() {
+        _isOwner = isOwner;
+        _canEdit = canEdit;
+      });
+    } catch (e) {
+      debugPrint('PERM error: $e');
+      if (!mounted) return;
+      setState(() {
+        _isOwner = false;
+        _canEdit = false;
+      });
+    } finally {
+      if (mounted) setState(() => _loadingPerm = false);
+    }
   }
 
   @override
@@ -43,17 +87,14 @@ class _LocationCardState extends State<LocationCard> {
       builder: (context, c) {
         final bool compact = c.maxWidth < 340;
 
-        // ขนาดส่วน header + ไอคอน
         final double headerHeight = compact ? 112 : 120;
-        final double iconBox      = compact ? 48  : 56;
-        final double iconSize     = compact ? 22  : 26;
+        final double iconBox = compact ? 48 : 56;
+        final double iconSize = compact ? 22 : 26;
 
-        // ฟอนต์ข้อความ
-        final double titleFont    = compact ? 14 : 16;
-        final double addrFont     = compact ? 12 : 13;
-        final double descFont     = (compact ? 12 : 13) - 1;
+        final double titleFont = compact ? 14 : 16;
+        final double addrFont = compact ? 12 : 13;
+        final double descFont = (compact ? 12 : 13) - 1;
 
-        // ระยะห่างในโซนข้อความ
         final EdgeInsets contentPad = EdgeInsets.symmetric(
           horizontal: compact ? 12 : 16,
           vertical: compact ? 10 : 12,
@@ -61,7 +102,7 @@ class _LocationCardState extends State<LocationCard> {
 
         return MouseRegion(
           onEnter: (_) => setState(() => isHovered = true),
-          onExit:  (_) => setState(() => isHovered = false),
+          onExit: (_) => setState(() => isHovered = false),
           child: GestureDetector(
             onTap: widget.onTap,
             child: Card(
@@ -73,29 +114,32 @@ class _LocationCardState extends State<LocationCard> {
               clipBehavior: Clip.antiAlias,
               child: Stack(
                 children: [
-                  // ── เนื้อหาหลัก ───────────────────────────────────────────
+                  // เนื้อหา
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Header สี + ไอคอน
                       Container(
                         height: headerHeight,
                         color: widget.location.color,
                         child: Center(
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
-                            width:  iconBox,
+                            width: iconBox,
                             height: iconBox,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(isHovered ? 0.35 : 0.25),
+                              color: Colors.white.withValues(
+                                alpha: isHovered ? 0.35 : 0.25,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Icon(Icons.apartment, color: Colors.white, size: iconSize),
+                            child: Icon(
+                              Icons.apartment,
+                              color: Colors.white,
+                              size: iconSize,
+                            ),
                           ),
                         ),
                       ),
-
-                      // โซนข้อความ (กัน overflow เอง, ไม่ scroll)
                       Expanded(
                         child: Padding(
                           padding: contentPad,
@@ -112,22 +156,24 @@ class _LocationCardState extends State<LocationCard> {
                     ],
                   ),
 
-                  // ── ปุ่มแก้ไข/ลบ “มุมขวาบน” เหมือนตำแหน่งเดิม ───────────
-                  if (canEdit || isOwner)
+                  // ปุ่มมุมขวาบน (จะแสดงเมื่อโหลดสิทธิ์เสร็จ และได้สิทธิ์จริง)
+                  if (!_loadingPerm && (_canEdit || _isOwner))
                     Positioned(
                       top: 8,
                       right: 8,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (canEdit)
+                          // Edit: แสดงเมื่อ canEdit (รวม owner แล้ว)
+                          if (_canEdit)
                             _floatingActionIcon(
                               tooltip: 'Edit Location',
                               icon: Icons.edit,
                               onTap: widget.onEdit,
                             ),
-                          if (isOwner) const SizedBox(width: 6),
-                          if (isOwner)
+                          if (_isOwner) const SizedBox(width: 6),
+                          // Delete: เฉพาะ owner เท่านั้น
+                          if (_isOwner)
                             _floatingActionIcon(
                               tooltip: 'Delete Location',
                               icon: Icons.delete,
@@ -145,7 +191,6 @@ class _LocationCardState extends State<LocationCard> {
     );
   }
 
-  /// ปุ่มลอยเล็ก ๆ สีขาวโปร่ง เพื่อให้เห็นชัดบน header
   Widget _floatingActionIcon({
     required String tooltip,
     required IconData icon,
@@ -153,6 +198,9 @@ class _LocationCardState extends State<LocationCard> {
   }) {
     return Tooltip(
       message: tooltip,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.35),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(10),
@@ -161,14 +209,13 @@ class _LocationCardState extends State<LocationCard> {
             child: Icon(icon, color: Colors.white, size: 18),
           ),
         ),
+      ),
     );
   }
 }
 
-/// ทำให้ข้อความ “พอดีกับพื้นที่ที่เหลือ” เสมอ:
-/// 1) จำกัดบรรทัด: ชื่อ 1, ที่อยู่ 2, คำอธิบาย 1
-/// 2) ถ้าพื้นที่ไม่พอ → ตัดคำอธิบาย → ลดที่อยู่เหลือ 1 → เหลือ 0
-/// 3) ถ้ายังไม่พออีก → ย่อทั้งบล็อกด้วย FittedBox(BoxFit.scaleDown)
+/// ====== _AutoScaleInfo ======
+
 class _AutoScaleInfo extends StatelessWidget {
   final String name;
   final String address;
@@ -192,23 +239,22 @@ class _AutoScaleInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (ctx, inner) {
-        final double budget = inner.maxHeight; // ความสูงที่เหลือจริง ๆ
+        final double budget = inner.maxHeight;
 
         bool hasDesc = description != null && description!.trim().isNotEmpty;
         int addrLines = 2;
 
         const double gapTitle = 4.0;
-        const double gapDesc  = 4.0;
+        const double gapDesc = 4.0;
 
         double need(bool withDesc, int addrLs) {
-          final titleH = _lineH(titleFont, 1.20);             // ชื่อ 1 บรรทัด
-          final addrH  = _lineH(addrFont,  1.25) * addrLs;    // ที่อยู่ 1–2 บรรทัด
-          final descH  = withDesc ? _lineH(descFont, 1.20) : 0.0;
-          final gaps   = gapTitle + (withDesc ? gapDesc : 0.0);
+          final titleH = _lineH(titleFont, 1.20);
+          final addrH = _lineH(addrFont, 1.25) * addrLs;
+          final descH = withDesc ? _lineH(descFont, 1.20) : 0.0;
+          final gaps = gapTitle + (withDesc ? gapDesc : 0.0);
           return titleH + addrH + descH + gaps;
         }
 
-        // ลดเนื้อหาให้อยู่ในงบ
         double needed = need(hasDesc, addrLines);
         if (needed > budget && hasDesc) {
           hasDesc = false;
@@ -223,9 +269,8 @@ class _AutoScaleInfo extends StatelessWidget {
           needed = need(hasDesc, addrLines);
         }
 
-        // เนื้อหาตามบรรทัดที่ตัดสินได้
         final content = Column(
-          mainAxisSize: MainAxisSize.min, // ไม่ดันเกินพื้นที่
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -244,7 +289,6 @@ class _AutoScaleInfo extends StatelessWidget {
                 leadingDistribution: TextLeadingDistribution.even,
               ),
             ),
-
             if (addrLines > 0) ...[
               const SizedBox(height: gapTitle),
               Text(
@@ -263,7 +307,6 @@ class _AutoScaleInfo extends StatelessWidget {
                 ),
               ),
             ],
-
             if (hasDesc) ...[
               const SizedBox(height: gapDesc),
               Text(
@@ -285,7 +328,6 @@ class _AutoScaleInfo extends StatelessWidget {
           ],
         );
 
-        // กัน sub-pixel overflow (0.x–3px) ด้วยการย่อทั้งบล็อกลงเล็กน้อยเมื่อจำเป็น
         return FittedBox(
           alignment: Alignment.topLeft,
           fit: BoxFit.scaleDown,

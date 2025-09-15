@@ -1,194 +1,227 @@
-
-
+// lib/providers/permission_provider.dart
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/permission.dart';
 
+/// ปรับให้คุยกับ DB ด้วยสตริงพิมพ์เล็กทั้งหมด
 class PermissionProvider with ChangeNotifier {
   final supa = Supabase.instance.client;
 
-  String get currentEmail => supa.auth.currentUser?.email ?? '';
-
-  // -------- LOADERS --------
-  Future<bool> isOwner(String locationId) async {
-    final r = await supa
-        .from('locations')
-        .select('owner_email')
-        .eq('locations_id', locationId)
-        .maybeSingle();
-    if (r == null) return false;
-    final owner = (r['owner_email'] ?? '').toString().toLowerCase();
-    return owner == (currentEmail.toLowerCase());
+  /// email ผู้ล็อกอินปัจจุบัน
+  String get currentEmail {
+    final e = (supa.auth.currentUser?.email ?? '').toLowerCase();
+    return e.isNotEmpty ? e : 'vdowduang@gmail.com'; // DEV fallback
   }
 
-  Future<List<PermissionMember>> listMembers(String locationId) async {
-    final r = await supa
-        .from('location_members')
-        .select()
-        .eq('location_id', locationId)
-        .order('confirm_at', ascending: false);
-    return List<Map<String, dynamic>>.from(r)
-        .map(PermissionMember.fromMap)
-        .toList();
-  }
+  /// cache รายสมาชิกต่อ location
+  final Map<String, List<PermissionMember>> _cacheByLocation = {};
+  List<PermissionMember> membersFor(String locationId) =>
+      _cacheByLocation[locationId] ?? const [];
 
-  Future<List<PermissionLog>> listLogs(String locationId) async {
-    final r = await supa
-        .from('permission_log')
-        .select()
-        .eq('location_id', locationId)
-        .order('created_at', ascending: false)
-        .limit(200);
-    return List<Map<String, dynamic>>.from(r)
-        .map(PermissionLog.fromMap)
-        .toList();
-  }
+  /// ====== Mapping helper สำหรับ DB (กันเคสตัวพิมพ์) ======
+  String toDbPermission(PermissionType t) => t.dbValue;
+  String toDbStatus(MemberStatus s) => s.dbValue;
 
-  // -------- ACTIONS --------
-  /// ส่งคำเชิญ (สร้าง log = pending) — ยังไม่เพิ่มลง location_members จนกว่าจะยืนยัน
-  Future<String> invite({
-    required String locationId,
-    required String inviteEmail,
-    required String permission, // 'view'|'edit'
-    String? inviteName,
-    Duration expireIn = const Duration(hours: 24),
-  }) async {
-    final owner = currentEmail;
-    final nowIso = DateTime.now().toUtc().toIso8601String();
-    final expiredIso =
-        DateTime.now().toUtc().add(expireIn).toIso8601String();
+  /// ====== Permission Check Methods ======
 
-    final insert = await supa.from('permission_log').insert({
-      'location_id': locationId,
-      'invited_email': inviteEmail.toLowerCase(),
-      'invited_name': inviteName,
-      'permission': permission,
-      'status': PermissionLogStatus.pending,
-      'invited_by_email': owner,
-      'created_at': nowIso,
-      'expired_at': expiredIso,
-    }).select('permission_log_id').single();
-
-    final token = insert['permission_log_id'] as String;
-    notifyListeners();
-    return token;
-  }
-
-  /// ผู้ถูกเชิญยืนยันด้วย token → เรียก RPC ใน DB
-  Future<void> confirmByToken(String token) async {
-    await supa.rpc('rpc_confirm_permission', params: {'p_token': token});
-    notifyListeners();
-  }
-
-  /// เปลี่ยนสิทธิ์ของสมาชิกที่ยืนยันแล้ว
-  Future<void> changePermission({
-    required String locationId,
-    required String memberEmail,
-    required String newPermission, // 'view'|'edit'
-  }) async {
-    final email = memberEmail.toLowerCase();
-    await supa.from('location_members').update({
-      'permission': newPermission,
-    }).match({
-      'location_id': locationId,
-      'member_email': email,
-    });
-
-    // เขียน log ประกอบ (ถือเป็น confirmed event)
-    await supa.from('permission_log').insert({
-      'location_id': locationId,
-      'invited_email': email,
-      'invited_name': null,
-      'permission': newPermission,
-      'status': PermissionLogStatus.confirmed,
-      'invited_by_email': currentEmail,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-      'confirm_at': DateTime.now().toUtc().toIso8601String(),
-    });
-
-    notifyListeners();
-  }
-
-  /// เพิกถอนสิทธิ์ (confirmed → disabled)
-  Future<void> revoke({
-    required String locationId,
-    required String memberEmail,
-  }) async {
-    final email = memberEmail.toLowerCase();
-    final now = DateTime.now().toUtc().toIso8601String();
-
-    await supa.from('location_members').update({
-      'status': MemberStatus.disabled,
-      'disabled_at': now,
-    }).match({
-      'location_id': locationId,
-      'member_email': email,
-    });
-
-    await supa.from('permission_log').insert({
-      'location_id': locationId,
-      'invited_email': email,
-      'permission': PermissionType.view, // บันทึกเหตุการณ์
-      'status': PermissionLogStatus.disabled,
-      'invited_by_email': currentEmail,
-      'created_at': now,
-      'disabled_at': now,
-    });
-
-    notifyListeners();
-  }
-
-  /// Re-invite: สร้าง log ใหม่ (pending) ให้คนเดิม
-  Future<String> reInvite({
-    required String locationId,
-    required String inviteEmail,
-    required String permission,
-    String? inviteName,
-  }) async {
-    final token = await invite(
-      locationId: locationId,
-      inviteEmail: inviteEmail,
-      permission: permission,
-      inviteName: inviteName,
+  /// เช็คว่าผู้ใช้ปัจจุบันเป็น owner ของ location นี้หรือไม่
+  bool isOwner(String locationId) {
+    final members = membersFor(locationId);
+    final currentUser = members.firstWhere(
+      (member) =>
+          member.email == currentEmail &&
+          member.status == MemberStatus.confirmed,
+      orElse: () => PermissionMember(
+        memberId: '',
+        locationId: '',
+        email: '',
+        permission: PermissionType.view,
+        status: MemberStatus.unknown,
+      ),
     );
-    return token;
+    return currentUser.permission == PermissionType.owner;
   }
 
-  /// เรียก cron/ฟังก์ชันหมดอายุคำเชิญที่ค้าง (optional)
-  Future<void> markExpiredInvites() async {
-    await supa.rpc('rpc_expire_pending_invites');
-    notifyListeners();
+  /// เช็คว่าผู้ใช้ปัจจุบันสามารถแก้ไขได้หรือไม่ (owner หรือ edit)
+  bool canEdit(String locationId) {
+    final members = membersFor(locationId);
+    final currentUser = members.firstWhere(
+      (member) =>
+          member.email == currentEmail &&
+          member.status == MemberStatus.confirmed,
+      orElse: () => PermissionMember(
+        memberId: '',
+        locationId: '',
+        email: '',
+        permission: PermissionType.view,
+        status: MemberStatus.unknown,
+      ),
+    );
+    return currentUser.permission == PermissionType.owner ||
+        currentUser.permission == PermissionType.edit;
   }
 
-  // -------- HELPERS (wrappers) --------
+  /// เช็คว่าผู้ใช้ปัจจุบันสามารถดูได้หรือไม่ (owner, edit, หรือ view)
+  bool canView(String locationId) {
+    final members = membersFor(locationId);
+    return members.any(
+      (member) =>
+          member.email == currentEmail &&
+          member.status == MemberStatus.confirmed,
+    );
+  }
 
-  /// Owner = สิทธิ์ทุกอย่าง
-  Future<bool> hasEditPermission(String locationId) async {
-    final owner = await isOwner(locationId);
-    if (owner) return true;
-    final email = currentEmail.toLowerCase();
-    final members = await listMembers(locationId);
-    for (final m in members) {
-      if (m.email.toLowerCase() == email &&
-          m.status == MemberStatus.confirmed &&
-          m.permission == PermissionType.edit) {
-        return true;
-      }
+  /// เช็คสิทธิ์แบบละเอียด - คืนค่า PermissionType หรือ null ถ้าไม่มีสิทธิ์
+  PermissionType? getUserPermission(String locationId) {
+    final members = membersFor(locationId);
+    final currentUser = members.firstWhere(
+      (member) =>
+          member.email == currentEmail &&
+          member.status == MemberStatus.confirmed,
+      orElse: () => PermissionMember(
+        memberId: '',
+        locationId: '',
+        email: '',
+        permission: PermissionType.view,
+        status: MemberStatus.unknown,
+      ),
+    );
+
+    if (currentUser.status == MemberStatus.unknown) return null;
+    return currentUser.permission;
+  }
+
+  /// ดึงสมาชิกของ location (owner/edit/view)
+  Future<List<PermissionMember>> loadMembers(String locationId) async {
+    try {
+      final res = await supa
+          .from('location_members')
+          .select('*')
+          .eq('location_id', locationId)
+          .order('member_email', ascending: true);
+
+      final items = (res as List<dynamic>? ?? [])
+          .map((e) => PermissionMember.fromDb(e as Map<String, dynamic>))
+          .toList();
+
+      _cacheByLocation[locationId] = items;
+      notifyListeners();
+      return items;
+    } catch (e) {
+      debugPrint('❌ loadMembers error: $e');
+      rethrow;
     }
-    return false;
   }
 
-  Future<bool> hasViewPermission(String locationId) async {
-    final owner = await isOwner(locationId);
-    if (owner) return true;
-    final email = currentEmail.toLowerCase();
-    final members = await listMembers(locationId);
-    for (final m in members) {
-      if (m.email.toLowerCase() == email &&
-          m.status == MemberStatus.confirmed) {
-        return true; // ทั้ง view และ edit ที่ confirmed เห็นได้
-      }
+  /// เพิ่มสมาชิก/แก้สิทธิ์
+  Future<void> upsertMember({
+    required String locationId,
+    required String email,
+    String? name,
+    required PermissionType permission,
+    MemberStatus status = MemberStatus.confirmed,
+  }) async {
+    final payload = {
+      'location_id': locationId,
+      'member_email': email.toLowerCase(),
+      'member_name': name,
+      'member_permission': toDbPermission(permission), // ✅ lowercase
+      'member_status': toDbStatus(status), // ✅ lowercase
+    };
+
+    try {
+      await supa
+          .from('location_members')
+          .upsert(payload, onConflict: 'location_id,member_email');
+      await loadMembers(locationId);
+    } catch (e) {
+      debugPrint('❌ upsertMember error: $e');
+      rethrow;
     }
-    return false;
+  }
+
+  /// เปลี่ยน permission ของสมาชิก
+  Future<void> updatePermission({
+    required String locationId,
+    required String email,
+    required PermissionType permission,
+  }) async {
+    try {
+      await supa
+          .from('location_members')
+          .update({
+            'member_permission': toDbPermission(permission),
+          }) // ✅ lowercase
+          .eq('location_id', locationId)
+          .eq('member_email', email.toLowerCase());
+      await loadMembers(locationId);
+    } catch (e) {
+      debugPrint('❌ updatePermission error: $e');
+      rethrow;
+    }
+  }
+
+  /// เปลี่ยนสถานะสมาชิก
+  Future<void> updateStatus({
+    required String locationId,
+    required String email,
+    required MemberStatus status,
+  }) async {
+    try {
+      await supa
+          .from('location_members')
+          .update({'member_status': toDbStatus(status)}) // ✅ lowercase
+          .eq('location_id', locationId)
+          .eq('member_email', email.toLowerCase());
+      await loadMembers(locationId);
+    } catch (e) {
+      debugPrint('❌ updateStatus error: $e');
+      rethrow;
+    }
+  }
+
+  /// ลบสมาชิก
+  Future<void> removeMember({
+    required String locationId,
+    required String email,
+  }) async {
+    try {
+      await supa
+          .from('location_members')
+          .delete()
+          .eq('location_id', locationId)
+          .eq('member_email', email.toLowerCase());
+      await loadMembers(locationId);
+    } catch (e) {
+      debugPrint('❌ removeMember error: $e');
+      rethrow;
+    }
+  }
+
+  /// ดึงเฉพาะสมาชิกที่มีสิทธิ์ตามชุดที่กำหนด (หลีกเลี่ยง .in_ ที่บางเวอร์ชันไม่มี)
+  Future<List<PermissionMember>> listByPermissions({
+    required String locationId,
+    required List<PermissionType> permissions,
+  }) async {
+    // ทำเป็น OR string เช่น member_permission.eq.view,member_permission.eq.edit
+    final ors = permissions
+        .map((p) => 'member_permission.eq.${toDbPermission(p)}')
+        .join(',');
+
+    try {
+      final res = await supa
+          .from('location_members')
+          .select('*')
+          .eq('location_id', locationId)
+          .or(ors);
+
+      final items = (res as List<dynamic>? ?? [])
+          .map((e) => PermissionMember.fromDb(e as Map<String, dynamic>))
+          .toList();
+      return items;
+    } catch (e) {
+      debugPrint('❌ listByPermissions error: $e');
+      rethrow;
+    }
   }
 }

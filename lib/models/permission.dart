@@ -1,89 +1,4 @@
-// enum UserRole { admin, manager, viewer }
-
-// class Permission {
-//   final String locationId;
-//   final bool canView;
-//   final bool canEdit;
-//   final bool canUpload;
-//   final bool canManage;
-
-//   Permission({
-//     required this.locationId,
-//     required this.canView,
-//     required this.canEdit,
-//     required this.canUpload,
-//     required this.canManage,
-//   });
-
-//   Permission copyWith({
-//     String? locationId,
-//     bool? canView,
-//     bool? canEdit,
-//     bool? canUpload,
-//     bool? canManage,
-//   }) {
-//     return Permission(
-//       locationId: locationId ?? this.locationId,
-//       canView: canView ?? this.canView,
-//       canEdit: canEdit ?? this.canEdit,
-//       canUpload: canUpload ?? this.canUpload,
-//       canManage: canManage ?? this.canManage,
-//     );
-//   }
-// }
-
-// class User {
-//   final String id;
-//   final String name;
-//   final String email;
-//   final UserRole role;
-//   final List<Permission> permissions;
-//   final String? avatar;
-//   final String? lastLogin;
-//   final bool isActive;
-
-//   User({
-//     required this.id,
-//     required this.name,
-//     required this.email,
-//     required this.role,
-//     required this.permissions,
-//     this.avatar,
-//     this.lastLogin,
-//     this.isActive = true,
-//   });
-
-//   User copyWith({
-//     String? id,
-//     String? name,
-//     String? email,
-//     UserRole? role,
-//     List<Permission>? permissions,
-//     String? avatar,
-//     String? lastLogin,
-//     bool? isActive,
-//   }) {
-//     return User(
-//       id: id ?? this.id,
-//       name: name ?? this.name,
-//       email: email ?? this.email,
-//       role: role ?? this.role,
-//       permissions: permissions ?? this.permissions,
-//       avatar: avatar ?? this.avatar,
-//       lastLogin: lastLogin ?? this.lastLogin,
-//       isActive: isActive ?? this.isActive,
-//     );
-//   }
-
-  
-// }
-
 // lib/models/permission.dart
-// ✅ Models + Utilities สำหรับระบบ Permission
-// - ใช้กับตาราง: location_members, permission_log
-// - มี helper เช็คสิทธิ์: isOwner, hasEditPermission, hasViewPermission
-// - ไม่มีการอ้างอิงถึงรูปภาพ (ตามข้อกำหนดล่าสุด)
-
 import 'package:intl/intl.dart';
 
 /// ===== Utilities =====
@@ -98,237 +13,163 @@ String formatLocal(DateTime? dt, {String pattern = 'yyyy-MM-dd HH:mm'}) {
   return DateFormat(pattern).format(dt.toLocal());
 }
 
-/// ===== Enums (string-based) =====
-class PermissionType {
-  static const view = 'view';
-  static const edit = 'edit';
-  static const all = [view, edit];
+/// ===== Enums (string-based for app) =====
+/// โครงสร้าง enum ฝั่งแอป (ผูกกับ DB ผ่านค่าพิมพ์เล็ก)
+enum PermissionType { view, edit, owner }
+
+enum MemberStatus {
+  pending,
+  confirmed,
+  revoked,
+  expired,
+  disabled,
+  left,
+  invited,
+  unknown,
 }
 
-class MemberStatus {
-  static const confirmed = 'confirmed';
-  static const disabled = 'disabled';
-  static const all = [confirmed, disabled];
+/// --- Mapping: App <-> DB (lowercase only) ---
+extension PermissionTypeX on PermissionType {
+  /// label ที่ใช้ในแอป
+  String get label {
+    switch (this) {
+      case PermissionType.owner:
+        return 'owner';
+      case PermissionType.edit:
+        return 'edit';
+      case PermissionType.view:
+        return 'view';
+    }
+  }
+
+  /// ค่าที่จะเก็บใน DB (บังคับเป็นพิมพ์เล็ก)
+  String get dbValue => label;
+
+  static PermissionType fromDb(String? v) {
+    switch ((v ?? '').trim().toLowerCase()) {
+      case 'owner':
+        return PermissionType.owner;
+      case 'edit':
+        return PermissionType.edit;
+      default:
+        return PermissionType.view;
+    }
+  }
 }
 
-class PermissionLogStatus {
-  static const pending = 'pending';
-  static const confirmed = 'confirmed';
-  static const expired = 'expired';
-  static const disabled = 'disabled';
-  static const all = [pending, confirmed, expired, disabled];
+extension MemberStatusX on MemberStatus {
+  String get label {
+    switch (this) {
+      case MemberStatus.pending:
+        return 'pending';
+      case MemberStatus.confirmed:
+        return 'confirmed';
+      case MemberStatus.revoked:
+        return 'revoked';
+      case MemberStatus.expired:
+        return 'expired';
+      case MemberStatus.disabled:
+        return 'disabled';
+      case MemberStatus.left:
+        return 'left';
+      case MemberStatus.invited:
+        return 'invited';
+      case MemberStatus.unknown:
+        return 'unknown';
+    }
+  }
+
+  /// ค่าใน DB (บังคับพิมพ์เล็ก)
+  String get dbValue => label;
+
+  static MemberStatus fromDb(String? v) {
+    switch ((v ?? '').trim().toLowerCase()) {
+      case 'pending':
+        return MemberStatus.pending;
+      case 'confirmed':
+        return MemberStatus.confirmed;
+      case 'revoked':
+        return MemberStatus.revoked;
+      case 'expired':
+        return MemberStatus.expired;
+      case 'disabled':
+        return MemberStatus.disabled;
+      case 'left':
+        return MemberStatus.left;
+      case 'invited':
+        return MemberStatus.invited;
+      default:
+        return MemberStatus.unknown;
+    }
+  }
+
+  /// สำหรับแปลงจากค่าใดๆ (String, MemberStatus, etc.)
+  static MemberStatus fromAny(dynamic v) {
+    if (v is MemberStatus) return v;
+    if (v is String) return fromDb(v);
+    return MemberStatus.unknown; // default
+  }
 }
 
 /// ===== Models =====
-
-/// แทนแถวในตาราง `location_members` (สิทธิ์ปัจจุบัน)
 class PermissionMember {
-  final String id;
+  final String memberId;
   final String locationId;
-  final String email;         // member_email
-  final String? name;         // member_name
-  final String permission;    // 'view' | 'edit'
-  final String status;        // 'confirmed' | 'disabled'
-  final DateTime? invitedAt;
-  final DateTime? confirmAt;
-  final DateTime? disabledAt;
+  final String email;
+  final String? name;
+  final PermissionType permission;
+  final MemberStatus status;
+  final DateTime? createdAt;
 
   const PermissionMember({
-    required this.id,
+    required this.memberId,
     required this.locationId,
     required this.email,
-    this.name,
     required this.permission,
     required this.status,
-    this.invitedAt,
-    this.confirmAt,
-    this.disabledAt,
+    this.name,
+    this.createdAt,
   });
 
-  factory PermissionMember.fromMap(Map<String, dynamic> m) {
+  factory PermissionMember.fromDb(Map<String, dynamic> row) {
     return PermissionMember(
-      id: m['id'] as String,
-      locationId: m['location_id'] as String,
-      email: m['member_email'] as String,
-      name: m['member_name'] as String?,
-      permission: m['permission'] as String,
-      status: m['status'] as String,
-      invitedAt: _parseTS(m['invited_at']),
-      confirmAt: _parseTS(m['confirm_at']),
-      disabledAt: _parseTS(m['disabled_at']),
+      memberId: (row['member_id'] ?? '').toString(),
+      locationId: (row['location_id'] ?? '').toString(),
+      email: (row['member_email'] ?? '').toString().toLowerCase(),
+      name: row['member_name']?.toString(),
+      permission: PermissionTypeX.fromDb(row['member_permission']?.toString()),
+      status: MemberStatusX.fromDb(row['member_status']?.toString()),
+      createdAt: _parseTS(row['created_at']),
     );
   }
 
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'location_id': locationId,
-        'member_email': email,
-        'member_name': name,
-        'permission': permission,
-        'status': status,
-        'invited_at': invitedAt?.toUtc().toIso8601String(),
-        'confirm_at': confirmAt?.toUtc().toIso8601String(),
-        'disabled_at': disabledAt?.toUtc().toIso8601String(),
-      };
+  Map<String, dynamic> toDb() => {
+    'member_id': memberId,
+    'location_id': locationId,
+    'member_email': email.toLowerCase(),
+    'member_name': name,
+    'member_permission': permission.dbValue,
+    'member_status': status.dbValue,
+    if (createdAt != null) 'created_at': createdAt!.toUtc().toIso8601String(),
+  };
 
   PermissionMember copyWith({
-    String? id,
+    String? memberId,
     String? locationId,
     String? email,
     String? name,
-    String? permission,
-    String? status,
-    DateTime? invitedAt,
-    DateTime? confirmAt,
-    DateTime? disabledAt,
+    PermissionType? permission,
+    MemberStatus? status,
+    DateTime? createdAt,
   }) {
     return PermissionMember(
-      id: id ?? this.id,
+      memberId: memberId ?? this.memberId,
       locationId: locationId ?? this.locationId,
-      email: email ?? this.email,
+      email: (email ?? this.email).toLowerCase(),
       name: name ?? this.name,
       permission: permission ?? this.permission,
       status: status ?? this.status,
-      invitedAt: invitedAt ?? this.invitedAt,
-      confirmAt: confirmAt ?? this.confirmAt,
-      disabledAt: disabledAt ?? this.disabledAt,
-    );
-  }
-}
-
-/// แทนแถวในตาราง `permission_log` (ประวัติทุกเหตุการณ์)
-class PermissionLog {
-  final String id;                 // permission_log_id
-  final String locationId;
-  final String invitedEmail;
-  final String? invitedName;
-  final String permission;         // 'view' | 'edit'
-  final String status;             // 'pending' | 'confirmed' | 'expired' | 'disabled'
-  final String invitedByEmail;
-  final DateTime createdAt;
-  final DateTime? confirmAt;
-  final DateTime? expiredAt;
-  final DateTime? disabledAt;
-
-  const PermissionLog({
-    required this.id,
-    required this.locationId,
-    required this.invitedEmail,
-    this.invitedName,
-    required this.permission,
-    required this.status,
-    required this.invitedByEmail,
-    required this.createdAt,
-    this.confirmAt,
-    this.expiredAt,
-    this.disabledAt,
-  });
-
-  factory PermissionLog.fromMap(Map<String, dynamic> m) {
-    return PermissionLog(
-      id: m['permission_log_id'] as String,
-      locationId: m['location_id'] as String,
-      invitedEmail: m['invited_email'] as String,
-      invitedName: m['invited_name'] as String?,
-      permission: m['permission'] as String,
-      status: m['status'] as String,
-      invitedByEmail: m['invited_by_email'] as String,
-      createdAt: _parseTS(m['created_at']) ?? DateTime.now(),
-      confirmAt: _parseTS(m['confirm_at']),
-      expiredAt: _parseTS(m['expired_at']),
-      disabledAt: _parseTS(m['disabled_at']),
-    );
-  }
-
-  Map<String, dynamic> toMap() => {
-        'permission_log_id': id,
-        'location_id': locationId,
-        'invited_email': invitedEmail,
-        'invited_name': invitedName,
-        'permission': permission,
-        'status': status,
-        'invited_by_email': invitedByEmail,
-        'created_at': createdAt.toUtc().toIso8601String(),
-        'confirm_at': confirmAt?.toUtc().toIso8601String(),
-        'expired_at': expiredAt?.toUtc().toIso8601String(),
-        'disabled_at': disabledAt?.toUtc().toIso8601String(),
-      };
-
-  PermissionLog copyWith({
-    String? id,
-    String? locationId,
-    String? invitedEmail,
-    String? invitedName,
-    String? permission,
-    String? status,
-    String? invitedByEmail,
-    DateTime? createdAt,
-    DateTime? confirmAt,
-    DateTime? expiredAt,
-    DateTime? disabledAt,
-  }) {
-    return PermissionLog(
-      id: id ?? this.id,
-      locationId: locationId ?? this.locationId,
-      invitedEmail: invitedEmail ?? this.invitedEmail,
-      invitedName: invitedName ?? this.invitedName,
-      permission: permission ?? this.permission,
-      status: status ?? this.status,
-      invitedByEmail: invitedByEmail ?? this.invitedByEmail,
       createdAt: createdAt ?? this.createdAt,
-      confirmAt: confirmAt ?? this.confirmAt,
-      expiredAt: expiredAt ?? this.expiredAt,
-      disabledAt: disabledAt ?? this.disabledAt,
     );
   }
-}
-
-/// ===== Helper functions สำหรับเช็คสิทธิ์ =====
-
-/// เช็คว่าเป็น Owner ของ location หรือไม่
-bool isOwner({
-  required String loggedInEmail,
-  required String ownerEmail,
-}) {
-  if (loggedInEmail.isEmpty || ownerEmail.isEmpty) return false;
-  return loggedInEmail.toLowerCase() == ownerEmail.toLowerCase();
-}
-
-/// เช็คว่า user มีสิทธิ์ EDIT หรือไม่ (Owner = ผ่านอัตโนมัติ)
-bool hasEditPermission({
-  required String loggedInEmail,
-  required String ownerEmail,
-  required List<PermissionMember> members, // จากตาราง location_members
-}) {
-  if (isOwner(loggedInEmail: loggedInEmail, ownerEmail: ownerEmail)) {
-    return true;
-  }
-  final email = loggedInEmail.toLowerCase();
-  for (final m in members) {
-    if (m.email.toLowerCase() == email &&
-        m.status == MemberStatus.confirmed &&
-        m.permission == PermissionType.edit) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/// เช็คว่า user มีสิทธิ์ VIEW หรือไม่ (Owner/Editor = ผ่าน, Viewer = confirmed ก็ผ่าน)
-bool hasViewPermission({
-  required String loggedInEmail,
-  required String ownerEmail,
-  required List<PermissionMember> members,
-}) {
-  if (isOwner(loggedInEmail: loggedInEmail, ownerEmail: ownerEmail)) {
-    return true;
-  }
-  final email = loggedInEmail.toLowerCase();
-  for (final m in members) {
-    if (m.email.toLowerCase() == email && m.status == MemberStatus.confirmed) {
-      // ทั้ง 'view' และ 'edit' ที่ confirmed ถือว่าเห็นได้
-      return true;
-    }
-  }
-  return false;
 }
