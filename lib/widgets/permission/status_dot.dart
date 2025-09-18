@@ -11,7 +11,6 @@ class StatusDot extends StatelessWidget {
   Widget build(BuildContext context) {
     Color c;
     switch (status) {
-      case MemberStatus.pending:
       case MemberStatus.invited:
         c = Colors.amber;
         break;

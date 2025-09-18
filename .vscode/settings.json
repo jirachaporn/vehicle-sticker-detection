@@ -15,7 +15,10 @@
     "**/.vscode/**"
   ],
   "C_Cpp_Runner.includePaths": [],
-  "C_Cpp_Runner.includeSearch": ["*", "**/*"],
+  "C_Cpp_Runner.includeSearch": [
+    "*",
+    "**/*"
+  ],
   "C_Cpp_Runner.linkerArgs": [],
   "C_Cpp_Runner.msvcBatchPath": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvarsall.bat",
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
@@ -53,30 +56,18 @@
     "-Wnull-dereference"
   ],
   "C_Cpp_Runner.warningsAsError": false,
-
   "[typescript]": {
     "editor.defaultFormatter": "denoland.vscode-deno"
   },
-
   "cmake.ignoreCMakeListsMissing": true,
-
-  // ✅ เปิด Deno ให้ทั้ง workspace (ให้ Deno LSP คุมไฟล์ .ts)
   "deno.enable": true,
-
-  // ✅ อนุญาต host ของ import แบบ CDN ที่เราใช้
   "deno.suggest.imports.hosts": {
     "https://esm.sh": true,
     "https://cdn.jsdelivr.net": true
   },
-
-  // ✅ เปิด lint ของ Deno
   "deno.lint": true,
-
-  // ✅ ปิดตัวตรวจของ TypeScript/JavaScript เอง เพื่อไม่ให้แย่งงาน Deno
   "typescript.validate.enable": false,
   "javascript.validate.enable": false,
-
-  // (ไม่บังคับ) รายการ unstable caps ตามที่คุณมีอยู่
   "deno.unstable": [
     "bare-node-builtins",
     "byonm",

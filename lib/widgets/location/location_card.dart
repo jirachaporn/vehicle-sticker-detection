@@ -56,13 +56,10 @@ class _LocationCardState extends State<LocationCard> {
       final perm = context.read<PermissionProvider>();
       final String locationId = widget.location.id;
 
-      // ✅ เปลี่ยนจาก fetchMembers เป็น loadMembers
       await perm.loadMembers(locationId);
 
       final bool isOwner = perm.isOwner(locationId);
       final bool canEdit = perm.canEdit(locationId);
-
-      debugPrint('PERM | loc=$locationId, owner=$isOwner, edit=$canEdit');
 
       if (!mounted) return;
       setState(() {
@@ -92,8 +89,8 @@ class _LocationCardState extends State<LocationCard> {
         final double iconSize = compact ? 22 : 26;
 
         final double titleFont = compact ? 14 : 16;
-        final double addrFont = compact ? 12 : 13;
-        final double descFont = (compact ? 12 : 13) - 1;
+        final double addrFont = compact ? 13 : 14;
+        final double descFont = (compact ? 13 : 14) - 1;
 
         final EdgeInsets contentPad = EdgeInsets.symmetric(
           horizontal: compact ? 12 : 16,
@@ -283,7 +280,7 @@ class _AutoScaleInfo extends StatelessWidget {
               ),
               style: TextStyle(
                 fontSize: titleFont,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
                 color: Colors.black87,
                 height: 1.20,
                 leadingDistribution: TextLeadingDistribution.even,
@@ -301,7 +298,7 @@ class _AutoScaleInfo extends StatelessWidget {
                 ),
                 style: TextStyle(
                   fontSize: addrFont,
-                  color: Colors.grey.shade700,
+                  color: Colors.black,
                   height: 1.25,
                   leadingDistribution: TextLeadingDistribution.even,
                 ),
@@ -319,7 +316,7 @@ class _AutoScaleInfo extends StatelessWidget {
                 ),
                 style: TextStyle(
                   fontSize: descFont,
-                  color: Colors.black54,
+                  color: Colors.grey.shade600,
                   height: 1.20,
                   leadingDistribution: TextLeadingDistribution.even,
                 ),

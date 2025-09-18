@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../providers/permission_provider.dart';
 import '../models/permission.dart';
@@ -34,7 +35,6 @@ class _PermissionPageState extends State<PermissionPage>
   final _inviteEmailCtrl = TextEditingController();
   final _inviteNameCtrl = TextEditingController();
 
-  /// เก็บสิทธิ์ในฟอร์มแบบ String ให้ตรงกับ InviteTab เดิม: "owner" | "edit" | "view"
   String _invitePerm = 'view';
 
   bool _loading = false;
@@ -60,7 +60,9 @@ class _PermissionPageState extends State<PermissionPage>
     setState(() => _loading = true);
     try {
       // เติมสมาชิกของ location นี้เข้าคาเช่
-      await context.read<PermissionProvider>().loadMembers(widget.locationId); // ✅
+      await context.read<PermissionProvider>().loadMembers(
+        widget.locationId,
+      ); // ✅
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -68,130 +70,178 @@ class _PermissionPageState extends State<PermissionPage>
 
   @override
   Widget build(BuildContext context) {
-    final perm = context.watch<PermissionProvider>();
-    final isOwner = perm.isOwner(widget.locationId);
-    final canEdit = perm.canEdit(widget.locationId);
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.locationName ?? 'Permissions'),
-        bottom: TabBar(
-          controller: _tab,
-          tabs: const [
-            Tab(text: 'สมาชิก'),
-            Tab(text: 'เพิ่มคำเชิญ'),
-            Tab(text: 'ประวัติ (Logs)'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            onPressed: _loading ? null : _refreshAll,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'รีเฟรช',
+    return Padding(
+      padding: const EdgeInsets.all(30),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Row(
+            children: [
+              Text(
+                (widget.locationName ?? 'Permissions'),
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const Spacer(),
+              const SizedBox(width: 56, height: 56),
+            ],
           ),
-        ],
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tab,
+          const SizedBox(height: 16),
+
+          Expanded(
+            child: Column(
               children: [
-                MembersTab(
-                  locationId: widget.locationId,
-                  onChanged: _refreshAll,
+                TabBar(
+                  controller: _tab,
+                  indicatorColor: const Color(0xFF2563EB),
+                  indicatorWeight: 3,
+                  labelColor: const Color(0xFF2563EB),
+                  unselectedLabelColor: Colors.black54,
+                  overlayColor: WidgetStateProperty.all(
+                    const Color(0x332563EB),
+                  ),
+                  labelStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  tabs: const [
+                    Tab(text: 'Members'),
+                    Tab(text: 'Invite'),
+                    Tab(text: 'Logs'),
+                  ],
                 ),
-                // InviteTab ใช้ String
-                InviteTab(
-                  locationId: widget.locationId,
-                  inviteEmailCtrl: _inviteEmailCtrl,
-                  inviteNameCtrl: _inviteNameCtrl,
-                  invitePerm: _invitePerm, // "owner" | "edit" | "view"
-                  onPermChanged: (v) => setState(() => _invitePerm = v),
-                  loading: _loadingInvite,
-                  onSubmit: () async {
-                    // อนุญาตเฉพาะ owner/editor
-                    if (!(isOwner || canEdit)) {
-                      _toast(context, 'คุณไม่มีสิทธิ์เชิญสมาชิก');
-                      return;
-                    }
-                    await _handleInvite();
-                  },
-                ),
-                LogsTab(
-                  locationId: widget.locationId,
-                  onExpireSweep: _handleExpireSweep, // จะเป็น toast "ยังไม่รองรับ"
+
+                const SizedBox(height: 12),
+                Expanded(
+                  child: _loading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Color.fromARGB(255, 37, 100, 235),
+                            ),
+                          ),
+                        )
+                      : TabBarView(
+                          controller: _tab,
+                          children: [
+                            MembersTab(
+                              locationId: widget.locationId,
+                              onChanged: _refreshAll,
+                            ),
+                            InviteTab(
+                              locationId: widget.locationId,
+                              inviteEmailCtrl: _inviteEmailCtrl,
+                              inviteNameCtrl: _inviteNameCtrl,
+                              invitePerm: _invitePerm,
+                              onPermChanged: (v) =>
+                                  setState(() => _invitePerm = v),
+                              loading: _loadingInvite,
+                              onSubmit: () async {
+                                await _handleInvite();
+                              },
+                            ),
+                            LogsTab(
+                              locationId: widget.locationId,
+                              onExpireSweep: _handleExpireSweep,
+                            ),
+                          ],
+                        ),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
     );
   }
 
   Future<void> _handleInvite() async {
     final provider = context.read<PermissionProvider>();
-    final email = _inviteEmailCtrl.text.trim();
-    final name = _inviteNameCtrl.text.trim().isEmpty
-        ? null
-        : _inviteNameCtrl.text.trim();
 
-    if (!_isEmail(email)) {
+    // raw สำหรับแสดงผล / email สำหรับใช้กับ DB
+    final rawEmail = _inviteEmailCtrl.text.trim();
+    final email = rawEmail.toLowerCase();
+    final name = _inviteNameCtrl.text.trim();
+
+    // 0) ตรวจอีเมล
+    if (!_isEmail(rawEmail)) {
       _toast(context, 'กรุณากรอกอีเมลให้ถูกต้อง');
       return;
     }
 
-    // แปลง String -> PermissionType ด้วย fromDb (รองรับ 'owner' | 'edit' | 'view')
-    final permType = PermissionTypeX.fromDb(_invitePerm); // ✅
-
     setState(() => _loadingInvite = true);
+
     try {
-      // 1) บันทึกคำเชิญ (สถานะ invited)
+      // 1) เพิ่ม/อัปเดตสมาชิกเป็นสถานะ invited
+      final permType = PermissionTypeX.fromDb(_invitePerm); // enum ของแอป
       await provider.upsertMember(
         locationId: widget.locationId,
-        email: email,
-        name: name,
+        email: email, // ใช้ lower-case เขียน DB
+        name: name.isEmpty ? null : name,
         permission: permType,
-        status: MemberStatus.invited, // ✅ เก็บสถานะคำเชิญ
+        status: MemberStatus.invited, // รอยืนยัน
       );
 
-      // 2) สร้างลิงก์ยืนยันแบบง่าย (ถ้ามี endpoint ยืนยันจริงค่อยปรับ)
-      final link =
-          'https://example.com/confirm-permission?location_id=${Uri.encodeComponent(widget.locationId)}&email=${Uri.encodeComponent(email)}';
+      // 2) ขอ token สำหรับยืนยัน (ให้ provider.invite สร้าง base64url)
+      final token = await provider.invite(
+        locationId: widget.locationId,
+        inviteEmail: email, // lower-case
+        permission: _invitePerm.toLowerCase(), // 'view' | 'edit' | 'owner'
+        inviteName: name.isEmpty ? null : name,
+      );
 
-      // 3) ส่งอีเมลผ่าน backend (ถ้าไม่มี endpoint นี้ ให้คอมเมนต์ทิ้งได้)
+      // 3) สร้างลิงก์ยืนยัน (encode token กันอักขระพิเศษ)
+      final baseUrlRaw =
+          dotenv.env['SUPABASE_URL'] ??
+          'https://<your-project-ref>.supabase.co';
+      final baseUrl = baseUrlRaw.replaceAll(RegExp(r'/$'), '');
+      final encodedToken = Uri.encodeComponent(token);
+      final confirmLink =
+          '$baseUrl/functions/v1/confirm-permission?token=$encodedToken';
+
+      // 4) ส่งอีเมลเชิญ
       await _sendInviteEmail(
-        toEmail: email,
-        linkUrl: link,
+        toEmail: rawEmail, // แสดงตามที่กรอก
+        linkUrl: confirmLink,
         invitedName: name,
         locationName: widget.locationName,
       );
 
+      // 5) แจ้งสำเร็จ + คัดลอกลิงก์
       if (!mounted) return;
-
       await copyToClipboardAndDialogSuccess(
         context,
-        title: 'ส่งคำเชิญสำเร็จ',
-        message: 'คัดลอกลิงก์ยืนยันไว้ให้:\n$link',
-        copyText: link,
+        title: 'เชิญสมาชิกสำเร็จ! 🎉',
+        message:
+            'ส่งลิงก์ยืนยันไปที่อีเมล $rawEmail แล้ว\n\nลิงก์: $confirmLink',
+        copyText: confirmLink,
       );
 
-      // ล้างฟอร์ม
+      // 6) เคลียร์ฟอร์ม
       _inviteEmailCtrl.clear();
       _inviteNameCtrl.clear();
       setState(() => _invitePerm = 'view');
 
-      // reload รายชื่อสมาชิก
-      await provider.loadMembers(widget.locationId); // ✅
-    } catch (e) {
+      // 7) รีเฟรชรายชื่อ
+      await provider.loadMembers(widget.locationId);
+    } catch (e, st) {
+      debugPrint('[_handleInvite] error: $e\n$st');
       if (!mounted) return;
-      _toast(context, 'เชิญไม่สำเร็จ: $e');
+      _toast(context, 'เชิญไม่สำเร็จ: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _loadingInvite = false);
     }
   }
 
   Future<void> _handleExpireSweep() async {
-    // ตอนนี้ยังไม่มี markExpiredInvites ใน PermissionProvider
     _toast(context, 'ยังไม่รองรับการสแกนคำเชิญหมดอายุในเวอร์ชันนี้');
-    // ถ้าต้องการ ให้เพิ่มเมธอดใน PermissionProvider แล้วค่อยเรียกใช้ที่นี่
   }
 
   // ----- helpers -----

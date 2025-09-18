@@ -35,7 +35,6 @@ class LogsTab extends StatelessWidget {
         final sorted = [...members]..sort((a, b) {
           int rank(MemberStatus s) {
             switch (s) {
-              case MemberStatus.pending:
               case MemberStatus.invited:
                 return 0;
               case MemberStatus.confirmed:
@@ -129,7 +128,6 @@ class LogsTab extends StatelessWidget {
 
   String _subtitleFor(PermissionMember m, String whenStr) {
     switch (m.status) {
-      case MemberStatus.pending:
       case MemberStatus.invited:
         return 'สถานะ: รอการยืนยัน • ชื่อ: ${m.name ?? "-"} • สร้างเมื่อ: $whenStr';
       case MemberStatus.confirmed:
@@ -154,7 +152,6 @@ class LogsTab extends StatelessWidget {
 
   static Color _statusBorderColor(MemberStatus status) {
     switch (status) {
-      case MemberStatus.pending:
       case MemberStatus.invited:
         return Colors.amber.shade200;
       case MemberStatus.confirmed:

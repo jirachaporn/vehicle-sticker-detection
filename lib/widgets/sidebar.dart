@@ -101,12 +101,12 @@ class Sidebar extends StatelessWidget {
                               const SizedBox(height: 8),
                               _buildLocationMenuItem(
                                 icon: Icons.sticky_note_2,
-                                label: 'Stickers',
+                                label: 'Models',
                                 isActive:
                                     appState.currentView ==
-                                    AppView.uploadStickers,
+                                    AppView.managemodels,
                                 onTap: () =>
-                                    appState.setView(AppView.uploadStickers),
+                                    appState.setView(AppView.managemodels),
                                 isCollapsed: isCollapsed,
                               ),
                             ],
@@ -152,6 +152,21 @@ class Sidebar extends StatelessWidget {
                                 isCollapsed: isCollapsed,
                               ),
                             ],
+
+                            // admin เท่านั้น → Annotation เดี๋ยวมาแก้สิทธิ์ ทำ UI ก่อน
+                            if (isOwner) ...[
+                              const SizedBox(height: 8),
+                              _buildLocationMenuItem(
+                                icon: Icons.label,
+                                label: 'Annotation',
+                                isActive:
+                                    appState.currentView == AppView.annotation,
+                                onTap: () =>
+                                    appState.setView(AppView.annotation),
+                                isCollapsed: isCollapsed,
+                              ),
+                            ],
+
                           ],
                         ],
                       );

@@ -18,13 +18,12 @@ String formatLocal(DateTime? dt, {String pattern = 'yyyy-MM-dd HH:mm'}) {
 enum PermissionType { view, edit, owner }
 
 enum MemberStatus {
-  pending,
+  invited,     // เปลี่ยนจาก pending เป็น invited (ตาม DB)
   confirmed,
-  revoked,
-  expired,
+  revoked,     // อาจจะไม่มีใน DB แต่เก็บไว้สำหรับอนาคต
+  expired,     // อาจจะไม่มีใน DB แต่เก็บไว้สำหรับอนาคต
   disabled,
-  left,
-  invited,
+  left,        // อาจจะไม่มีใน DB แต่เก็บไว้สำหรับอนาคต
   unknown,
 }
 
@@ -60,8 +59,8 @@ extension PermissionTypeX on PermissionType {
 extension MemberStatusX on MemberStatus {
   String get label {
     switch (this) {
-      case MemberStatus.pending:
-        return 'pending';
+      case MemberStatus.invited:
+        return 'invited';
       case MemberStatus.confirmed:
         return 'confirmed';
       case MemberStatus.revoked:
@@ -72,32 +71,73 @@ extension MemberStatusX on MemberStatus {
         return 'disabled';
       case MemberStatus.left:
         return 'left';
-      case MemberStatus.invited:
-        return 'invited';
       case MemberStatus.unknown:
         return 'unknown';
     }
   }
 
-  /// ค่าใน DB (บังคับพิมพ์เล็ก)
-  String get dbValue => label;
+  /// ค่าสำหรับ location_members table (member_status_enum)
+  String get dbValue {
+    switch (this) {
+      case MemberStatus.invited:
+        return 'invited';
+      case MemberStatus.confirmed:
+        return 'confirmed';
+      case MemberStatus.disabled:
+        return 'disabled';
+      // กรณีที่ยังไม่มีใน DB ให้ใช้ค่าที่ใกล้เคียงที่สุด
+      case MemberStatus.revoked:
+      case MemberStatus.expired:
+      case MemberStatus.left:
+        return 'disabled'; // fallback ไปเป็น disabled
+      case MemberStatus.unknown:
+      return 'invited'; // default fallback
+    }
+  }
+
+  /// ค่าสำหรับ permission_log table (permission_status_enum)
+  String get logDbValue {
+    switch (this) {
+      case MemberStatus.invited:
+        return 'pending'; // map invited -> pending สำหรับ log table
+      case MemberStatus.confirmed:
+        return 'confirmed';
+      case MemberStatus.disabled:
+        return 'disabled';
+      case MemberStatus.expired:
+        return 'expired';
+      // กรณีที่ยังไม่มีใน DB ให้ใช้ค่าที่ใกล้เคียงที่สุด
+      case MemberStatus.revoked:
+      case MemberStatus.left:
+        return 'disabled';
+      case MemberStatus.unknown:
+      return 'pending'; // default fallback
+    }
+  }
 
   static MemberStatus fromDb(String? v) {
     switch ((v ?? '').trim().toLowerCase()) {
-      case 'pending':
-        return MemberStatus.pending;
-      case 'confirmed':
-        return MemberStatus.confirmed;
-      case 'revoked':
-        return MemberStatus.revoked;
-      case 'expired':
-        return MemberStatus.expired;
-      case 'disabled':
-        return MemberStatus.disabled;
-      case 'left':
-        return MemberStatus.left;
       case 'invited':
         return MemberStatus.invited;
+      case 'confirmed':
+        return MemberStatus.confirmed;
+      case 'disabled':
+        return MemberStatus.disabled;
+      default:
+        return MemberStatus.unknown;
+    }
+  }
+
+  static MemberStatus fromLogDb(String? v) {
+    switch ((v ?? '').trim().toLowerCase()) {
+      case 'pending':
+        return MemberStatus.invited; // map pending -> invited จาก log table
+      case 'confirmed':
+        return MemberStatus.confirmed;
+      case 'disabled':
+        return MemberStatus.disabled;
+      case 'expired':
+        return MemberStatus.expired;
       default:
         return MemberStatus.unknown;
     }

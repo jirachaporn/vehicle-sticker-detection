@@ -7,10 +7,11 @@ import '../widgets/sidebar.dart';
 import 'home_page.dart';
 import 'permission_page.dart';
 import 'overview_page.dart';
-import 'upload_page.dart';
+import 'manage_models.dart';
 import 'camera_page.dart';
 import 'notification_page.dart';
 import 'data_table_page.dart';
+import 'annotation_page.dart';
 import '../providers/permission_provider.dart';
 import '../providers/api_service.dart';
 import '../providers/camera_manager.dart';
@@ -140,13 +141,12 @@ class _MainPageState extends State<MainPage> {
                         return DataTablePage(
                           locationId: appState.locationId ?? '',
                         );
-                      case AppView.uploadStickers:
-                        debugPrint(
-                          '📩 MainPage is building UploadScreen with locationId: ${appState.locationId}',
-                        );
-                        return UploadPage(
+                      case AppView.managemodels:
+                        return ManageModels(
                           locationId: appState.locationId ?? '',
                         );
+                      case AppView.annotation:
+                        return AnnotationPage();
                     }
                   }(),
                 ),

@@ -1,7 +1,6 @@
 // import 'dart:convert';
-import 'package:http/http.dart' as http;
-
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:myproject/models/location.dart';
 import 'package:myproject/widgets/snackbar/fail_snackbar.dart';
 import 'package:myproject/widgets/snackbar/success_snackbar.dart';
@@ -312,7 +311,7 @@ class _HomePageState extends State<HomePage> {
                       onLocationTap: (location) {
                         appState.selectLocation(location);
                         appState.setLocationId(location.id);
-                        appState.setView(AppView.uploadStickers);
+                        appState.setView(AppView.managemodels);
                       },
                       cardBuilder: (location, onTap) => LocationCard(
                         location: location,
@@ -320,7 +319,7 @@ class _HomePageState extends State<HomePage> {
                         onTap: () {
                           appState.selectLocation(location);
                           appState.setLocationId(location.id);
-                          appState.setView(AppView.uploadStickers);
+                          appState.setView(AppView.managemodels);
                         },
                         onEdit: () => _showEditDialog(location),
                         onDelete: () => _confirmDelete(location),

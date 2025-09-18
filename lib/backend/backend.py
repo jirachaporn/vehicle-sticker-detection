@@ -646,22 +646,24 @@ def get_locations():
 def save_locations():
     try:
         data = request.get_json() or {}
+
         # name และ owner_email ยังจำเป็น เพราะต้องสร้าง owner membership
         for field in ["name", "owner_email"]:
             if not (data.get(field) or "").strip():
                 return jsonify({"error": f"{field} is required"}), 400
 
-        owner_email = data["owner_email"].strip().lower()
-        now_ts = datetime.now(tz).isoformat()
+        owner_email = (data["owner_email"] or "").strip().lower()
+        owner_name = owner_email.split("@", 1)[0].strip() or None
 
+        now_ts = datetime.now(tz).isoformat()
         print(f"💾 Saving location: {data['name']} for {owner_email}")
 
-        # ✅ map ให้ตรง DB ใหม่
+        #  map ให้ตรง DB ใหม่
         location_data = {
-            "location_name": data.get("name", "").strip(),
-            "location_address": data.get("address", "").strip(),
+            "location_name": (data.get("name") or "").strip(),
+            "location_address": (data.get("address") or "").strip(),
             "location_description": (data.get("description") or "").strip(),
-            "location_color": (data.get("color") or "#000000").strip(),  # เก็บเป็นสตริงสี
+            "location_color": (data.get("color") or "#1565C0").strip(), 
             "created_at": now_ts,
         }
 
@@ -675,7 +677,7 @@ def save_locations():
         if not result.data:
             return jsonify({"error": "Failed to create location"}), 500
 
-        # 🆔 คีย์หลักใหม่ในตารางคือ location_id
+        #  คีย์หลักใหม่ในตารางคือ location_id
         new_id = result.data[0]["location_id"]
         print(f"✅ Location saved with ID: {new_id}")
 
@@ -683,22 +685,31 @@ def save_locations():
         owner_row = {
             "location_id": new_id,
             "member_email": owner_email,
-            "member_name": None,
+            "member_name": owner_name,      
             "member_permission": "owner",
             "member_status": "confirmed",
         }
-        # กันซ้ำด้วย upsert (ต้องตั้ง unique(location_id, member_email) ไว้ใน DB จะดีมาก)
-        supabase.table("location_members").upsert(owner_row).execute()
+
+        try:
+            supabase.table("location_members").insert(owner_row).execute()
+        except Exception as e:
+            try:
+                supabase.table("locations").delete().eq("location_id", new_id).execute()
+            except Exception as _:
+                pass
+            print(f"❌ create owner membership failed: {e}")
+            return jsonify({"error": "Failed to create owner membership"}), 500
 
         return jsonify({
             "message": "Location created successfully",
-            "id": new_id,                 # ใช้ใน frontend
-            "location": result.data[0],   # แถวที่เพิ่งสร้าง (มี location_id)
+            "id": new_id,
+            "location": result.data[0],
         }), 201
 
     except Exception as e:
         print(f"🔥 ERROR during /save_locations: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 
 # ===== locations: UPDATE =====

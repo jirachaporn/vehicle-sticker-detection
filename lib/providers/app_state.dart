@@ -12,7 +12,8 @@ enum AppView {
   notification,
   camera,
   table,
-  uploadStickers,
+  managemodels,
+  annotation,
 }
 
 class AppState extends ChangeNotifier {
