@@ -91,6 +91,9 @@ class _MainPageState extends State<MainPage> {
                     if (appState.currentView == AppView.home) {
                       return const HomePage();
                     }
+                    if (appState.currentView == AppView.annotation) {
+                      return const AnnotationPage();
+                    }
                     if (location == null) {
                       return const Center(
                         child: Text(

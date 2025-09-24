@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/app_state.dart';
-import '../providers/permission_provider.dart'; // ✅ ใช้เช็คสิทธิ์จริง
+import '../providers/permission_provider.dart';
 import '../screens/sign_in_page.dart';
 
 class Sidebar extends StatelessWidget {
@@ -60,13 +60,14 @@ class Sidebar extends StatelessWidget {
                   ),
                   child: Consumer2<AppState, PermissionProvider>(
                     builder: (context, appState, perm, child) {
-                      // ✅ อ่านสิทธิ์ตาม location_id ปัจจุบัน
                       final bool isOwner = appState.isOwnerWith(perm);
                       final bool canEdit = appState.canEditWith(perm);
+                      final bool isAdmin =
+                          appState.isAdmin; // ✅ ใช้คุมเมนู Annotation ใต้ Home
 
                       return Column(
                         children: [
-                          // Main Menu Items
+                          // ========= Main Menu =========
                           _buildMainMenuItem(
                             icon: Icons.home,
                             label: 'Home',
@@ -79,14 +80,24 @@ class Sidebar extends StatelessWidget {
                             isCollapsed: isCollapsed,
                           ),
 
-                          // Location-specific menu (แสดงเมื่อเลือกสถานที่แล้ว)
+                          // ✅ Annotation (เฉพาะ admin) — อยู่ "ใต้ Home"
+                          if (isAdmin)
+                            _buildMainMenuItem(
+                              icon: Icons.label,
+                              label: 'Annotation',
+                              isActive:
+                                  appState.currentView == AppView.annotation,
+                              onTap: () => appState.setView(AppView.annotation),
+                              isCollapsed: isCollapsed,
+                            ),
+
+                          // ========= Location-specific (เมื่อเลือกสถานที่แล้ว) =========
                           if (appState.selectedLocation != null) ...[
                             const SizedBox(height: 24),
                             if (!isCollapsed)
                               _buildLocationHeader(appState.selectedLocation!),
                             if (!isCollapsed) const SizedBox(height: 12),
 
-                            // ทุกสิทธิ์เห็น Overview
                             _buildLocationMenuItem(
                               icon: Icons.dashboard,
                               label: 'Overview',
@@ -96,7 +107,6 @@ class Sidebar extends StatelessWidget {
                               isCollapsed: isCollapsed,
                             ),
 
-                            // owner หรือ edit → เห็น Stickers
                             if (isOwner || canEdit) ...[
                               const SizedBox(height: 8),
                               _buildLocationMenuItem(
@@ -111,7 +121,6 @@ class Sidebar extends StatelessWidget {
                               ),
                             ],
 
-                            // ทุกสิทธิ์เห็น Camera, Notification, Table
                             const SizedBox(height: 8),
                             _buildLocationMenuItem(
                               icon: Icons.camera_alt,
@@ -139,7 +148,6 @@ class Sidebar extends StatelessWidget {
                               isCollapsed: isCollapsed,
                             ),
 
-                            // Owner เท่านั้น → Add Permission
                             if (isOwner) ...[
                               const SizedBox(height: 8),
                               _buildLocationMenuItem(
@@ -152,21 +160,6 @@ class Sidebar extends StatelessWidget {
                                 isCollapsed: isCollapsed,
                               ),
                             ],
-
-                            // admin เท่านั้น → Annotation เดี๋ยวมาแก้สิทธิ์ ทำ UI ก่อน
-                            if (isOwner) ...[
-                              const SizedBox(height: 8),
-                              _buildLocationMenuItem(
-                                icon: Icons.label,
-                                label: 'Annotation',
-                                isActive:
-                                    appState.currentView == AppView.annotation,
-                                onTap: () =>
-                                    appState.setView(AppView.annotation),
-                                isCollapsed: isCollapsed,
-                              ),
-                            ],
-
                           ],
                         ],
                       );
@@ -263,16 +256,22 @@ class Sidebar extends StatelessWidget {
           onEnter: (_) => setState(() => isHovered = true),
           onExit: (_) => setState(() => isHovered = false),
           child: GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                PageRouteBuilder(
-                  transitionDuration: const Duration(milliseconds: 100),
-                  pageBuilder: (_, __, ___) => const SignInPage(),
-                  transitionsBuilder: (_, animation, __, child) =>
-                      FadeTransition(opacity: animation, child: child),
-                ),
-              );
+            onTap: () async {
+              await context
+                  .read<AppState>()
+                  .signOutAndReset(); // ✅ เคลียร์ state
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  PageRouteBuilder(
+                    transitionDuration: const Duration(milliseconds: 100),
+                    pageBuilder: (_, __, ___) => const SignInPage(),
+                    transitionsBuilder: (_, animation, __, child) =>
+                        FadeTransition(opacity: animation, child: child),
+                  ),
+                  (_) => false,
+                );
+              }
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
@@ -303,10 +302,10 @@ class Sidebar extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Image.asset(
-                            'assets/icon_BoxMoveLeft.png',
-                            width: 25,
-                            height: 25,
+                          const Icon(
+                            Icons.logout,
+                            color: Colors.white,
+                            size: 22,
                           ),
                           const SizedBox(width: 8),
                           const Text(

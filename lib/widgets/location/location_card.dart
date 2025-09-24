@@ -1,5 +1,6 @@
 // lib/widgets/location_card.dart
 import 'package:flutter/material.dart';
+import 'package:myproject/providers/app_state.dart';
 import 'package:provider/provider.dart';
 import '../../models/location.dart';
 import '../../providers/permission_provider.dart';
@@ -30,6 +31,7 @@ class _LocationCardState extends State<LocationCard> {
 
   bool _isOwner = false;
   bool _canEdit = false;
+  bool _isAdmin = false; // 👈 เพิ่ม state สำหรับ Role: Admin
   bool _loadingPerm = true;
 
   @override
@@ -56,22 +58,37 @@ class _LocationCardState extends State<LocationCard> {
       final perm = context.read<PermissionProvider>();
       final String locationId = widget.location.id;
 
+      // โหลด member list เพื่อคำนวน owner/canEdit
       await perm.loadMembers(locationId);
 
       final bool isOwner = perm.isOwner(locationId);
       final bool canEdit = perm.canEdit(locationId);
 
+      // 👇 อ่านบทบาทระบบ (isAdmin) จาก AppState
+      // ถ้า AppState ยังไม่ถูก provide จะ catch และคงค่า false
+      bool adminRole = false;
+      try {
+        adminRole = context.read<AppState>().isAdmin;
+      } catch (_) {
+        adminRole = false;
+      }
+
       if (!mounted) return;
       setState(() {
         _isOwner = isOwner;
         _canEdit = canEdit;
+        _isAdmin = adminRole; // 👈 เก็บสถานะ Admin
       });
+      debugPrint(
+        '🔐 perms -> owner=$_isOwner, edit=$_canEdit, admin=$_isAdmin',
+      );
     } catch (e) {
       debugPrint('PERM error: $e');
       if (!mounted) return;
       setState(() {
         _isOwner = false;
         _canEdit = false;
+        _isAdmin = false;
       });
     } finally {
       if (mounted) setState(() => _loadingPerm = false);
@@ -153,24 +170,24 @@ class _LocationCardState extends State<LocationCard> {
                     ],
                   ),
 
-                  // ปุ่มมุมขวาบน (จะแสดงเมื่อโหลดสิทธิ์เสร็จ และได้สิทธิ์จริง)
-                  if (!_loadingPerm && (_canEdit || _isOwner))
+                  // ปุ่มมุมขวาบน
+                  if (_isAdmin || (!_loadingPerm && (_canEdit || _isOwner)))
                     Positioned(
                       top: 8,
                       right: 8,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Edit: แสดงเมื่อ canEdit (รวม owner แล้ว)
-                          if (_canEdit)
+                          // Edit: Admin หรือคนที่มีสิทธิ์แก้ไข (รวม owner)
+                          if (_isAdmin || _canEdit)
                             _floatingActionIcon(
                               tooltip: 'Edit Location',
                               icon: Icons.edit,
                               onTap: widget.onEdit,
                             ),
-                          if (_isOwner) const SizedBox(width: 6),
-                          // Delete: เฉพาะ owner เท่านั้น
-                          if (_isOwner)
+                          if (_isAdmin || _isOwner) const SizedBox(width: 6),
+                          // Delete: Admin หรือ Owner
+                          if (_isAdmin || _isOwner)
                             _floatingActionIcon(
                               tooltip: 'Delete Location',
                               icon: Icons.delete,

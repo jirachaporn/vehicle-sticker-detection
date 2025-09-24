@@ -246,7 +246,7 @@ class _SignUpPageState extends State<SignUpPage> {
     late OverlayEntry entry;
     entry = OverlayEntry(
       builder: (context) => Positioned(
-        top: 10,
+        top: 90,
         right: 16,
         child: Material(
           color: Colors.transparent,

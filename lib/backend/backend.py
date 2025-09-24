@@ -589,42 +589,64 @@ def reset_password():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+
+# -------------------- Role helpers --------------------
+def _get_user_role(email: str):
+    """คืนค่า role (str) หรือ None ถ้าไม่พบ"""
+    if not email:
+        return None
+    try:
+        r = supabase.table("users").select("user_role").eq("user_email", email).limit(1).execute()
+        if r.data and len(r.data) > 0:
+            return (r.data[0].get("user_role") or "").lower()
+    except Exception as e:
+        print(f"⚠️ _get_user_role_by_email error for {email}: {e}")
+    return None
+
+def _is_admin(email: str) -> bool:
+    role = _get_user_role(email)
+    return role == "admin"
+
+
+
 @app.route("/locations", methods=["GET"])
 def get_locations():
     user_email = request.args.get("user")
     if not user_email:
-        return jsonify({"error": "User email is required"}), 400
+        return jsonify({"error": "User email is required (query param 'user')"}), 400
 
     try:
-        print(f"🔍 Fetching locations (via location_members) for: {user_email}")
+        # เช็ค admin ก่อน
+        if _is_admin(user_email):
+            print(f"🔑 Admin detected: {user_email}, returning ALL locations")
+            loc_res = supabase.table("locations") \
+                .select("location_id, location_name, location_address, location_description, location_color, created_at") \
+                .order("created_at", desc=True) \
+                .execute()
+            locations = loc_res.data or []
+        else:
+            print(f"🔍 Fetching locations (via location_members) for: {user_email}")
+            mem_res = supabase.table("location_members") \
+                .select("location_id") \
+                .eq("member_email", user_email) \
+                .eq("member_status", "confirmed") \
+                .execute()
+            memberships = mem_res.data or []
+            loc_ids = [m.get("location_id") for m in memberships if m.get("location_id")]
+            if not loc_ids:
+                return jsonify([]), 200
+            loc_res = supabase.table("locations") \
+                .select("location_id, location_name, location_address, location_description, location_color, created_at") \
+                .in_("location_id", loc_ids) \
+                .order("created_at", desc=True) \
+                .execute()
+            locations = loc_res.data or []
 
-        # 1) หา location_id ที่ user เป็นสมาชิกและยืนยันแล้ว
-        mem_res = supabase.table("location_members") \
-            .select("location_id") \
-            .eq("member_email", user_email) \
-            .eq("member_status", "confirmed") \
-            .execute()
-
-        memberships = mem_res.data or []
-        loc_ids = [m.get("location_id") for m in memberships if m.get("location_id")]
-        if not loc_ids:
-            return jsonify([]), 200
-        
-
-        # 2) ดึงรายละเอียดสถานที่ตาม loc_ids (ใช้ชื่อคอลัมน์ตามสคีมาใหม่)
-        loc_res = supabase.table("locations") \
-            .select("location_id, location_name, location_address, location_description, location_color, created_at") \
-            .in_("location_id", loc_ids) \
-            .order("created_at", desc=True) \
-            .execute()
-
-        locations = loc_res.data or []
-
-        # 3) สร้าง response (คง key เดิม 'locations_id' ถ้า frontend ใช้อยู่)
+        # สร้าง response (คง key เดิม 'locations_id' ถ้า frontend ใช้อยู่)
         result = []
         for loc in locations:
             result.append({
-                "locations_id": loc.get("location_id"),                # alias ให้เหมือนของเดิม
+                "locations_id": loc.get("location_id"),
                 "name": loc.get("location_name"),
                 "address": loc.get("location_address"),
                 "description": loc.get("location_description"),
@@ -638,6 +660,7 @@ def get_locations():
     except Exception as e:
         print("🔥 ERROR during /locations:", e)
         return jsonify({"error": str(e)}), 500
+
 
 
 

@@ -57,7 +57,7 @@ class _SignInPageState extends State<SignInPage> {
     late OverlayEntry overlayEntry;
     overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        top: 10,
+        top: 90,
         right: 16,
         child: Material(
           color: Colors.transparent,
@@ -147,6 +147,7 @@ class _SignInPageState extends State<SignInPage> {
         email: loginEmail,
         password: password,
       );
+      await context.read<AppState>().loadMyRole();
 
       if (authRes.user == null) {
         showFailMessage('Login Failed', 'Something is incorrect');
