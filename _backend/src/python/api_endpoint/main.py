@@ -5,7 +5,7 @@ from .detection import router as detection_router
 
 app = FastAPI(title="Automated Vehicle Tagging System API")
 
-app.include_router(overview_router,detection_router)
+app.include_router(overview_router)
 
 @app.get("/")
 def root():
@@ -15,5 +15,4 @@ def root():
 
 
 
-
-# uvicorn src.python.api_endpoint.main:app --reload
+# uvicorn src.python.api_endpoint.main:app --reload --port 8000
