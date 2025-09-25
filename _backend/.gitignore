@@ -1,0 +1,19 @@
+__pycache__/
+.ipynb_checkpoints/
+.vscode/
+licenses_plates_imgs_detected/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.cspell.json/
+_img_ref/
+_STICKER_YOLO/
+_THAI_LP/
+zCar_0.mp4
+sticker_best.pt
