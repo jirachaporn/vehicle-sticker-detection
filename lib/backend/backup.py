@@ -686,7 +686,7 @@ def save_locations():
         result = insert_future.result(timeout=5)
 
         if result.data and len(result.data) > 0:
-            new_id = result.data[0]["locations_id"]  # ✅ uuid
+            new_id = result.data[0]["locations_id"] 
             print(f"✅ Location saved successfully with ID: {new_id}")
 
             return jsonify({

@@ -6,9 +6,8 @@ class Location {
   final String address;
   final String? description;
   final Color color;
-  final String ownerEmail;
-  final List<Map<String, dynamic>> sharedWith;
   final DateTime createdAt;
+  final String location_license;
 
   Location({
     required this.id,
@@ -16,98 +15,107 @@ class Location {
     required this.address,
     this.description,
     required this.color,
-    required this.ownerEmail,
-    required this.sharedWith,
     required this.createdAt,
+    required this.location_license,
   });
 
-  /// ✅ fromJson: แปลง JSON จาก backend (PostgreSQL) มาเป็น Object
-  factory Location.fromJson(Map<String, dynamic> json) {
-    return Location(
-      id: (json['locations_id'] ?? json['location_id'] ?? json['id'])
-          .toString(),
-      name: json['location_name'] ?? json['name'] ?? 'Unnamed Location',
-      address: json['address'] ?? '',
-      description: json['description'],
-      color: _parseColor(json['color']),
-      ownerEmail: json['owner_email'] ?? '',
-      sharedWith: List<Map<String, dynamic>>.from(json['shared_with'] ?? []),
-      createdAt: _parseDate(json['created_at']),
-    );
-  }
-
-  static DateTime _parseDate(dynamic value) {
+  // ===== helpers =====
+  static DateTime _parseDate(dynamic v) {
     try {
-      if (value is DateTime) return value;
-      if (value is String && value.isNotEmpty) {
-        return DateTime.parse(value);
-      }
+      if (v is DateTime) return v;
+      if (v is String && v.isNotEmpty) return DateTime.parse(v);
     } catch (e) {
-      debugPrint('❌ Error parsing created_at: $value → $e');
+      debugPrint('❌ created_at parse fail: $v → $e');
     }
     return DateTime(1970);
   }
 
-  /// แปลงสี
-  static Color _parseColor(dynamic colorValue) {
+  static Color _parseColor(dynamic v) {
     try {
-      if (colorValue == null) return const Color(0xFF4285F4);
-
-      if (colorValue is int) {
-        return Color(colorValue);
-      }
-
-      if (colorValue is String) {
-        // ✅ รองรับ '0xFF1565C0' และ '#4285F4'
-        if (colorValue.startsWith('0x')) {
-          return Color(int.parse(colorValue));
-        } else if (colorValue.startsWith('#')) {
-          return Color(int.parse(colorValue.replaceFirst('#', '0xFF')));
-        } else {
-          return Color(int.parse(colorValue));
-        }
+      if (v == null) return const Color(0xFF4285F4);
+      if (v is int) return Color(v);
+      if (v is String) {
+        // รองรับ '0xFF1565C0', '#4285F4', '4278231232'
+        if (v.startsWith('0x')) return Color(int.parse(v));
+        if (v.startsWith('#')) return Color(int.parse(v.replaceFirst('#', '0xFF')));
+        return Color(int.parse(v));
       }
     } catch (e) {
-      debugPrint('❌ Error parsing color: $colorValue → $e');
+      debugPrint('❌ color parse fail: $v → $e');
     }
-
-    return const Color(0xFF4285F4); // fallback สีฟ้า
+    return const Color(0xFF4285F4);
   }
 
-  /// ✅ toJson: แปลง Object กลับเป็น JSON ที่ตรงกับ backend
+  String _toWebHex(Color c) {
+    // ใช้แบบที่ขอไว้: toARGB32() → ตัดเอา RGB เป็น #RRGGBB
+    final argb = c.toARGB32();
+    final rgb = (argb & 0xFFFFFF)
+        .toRadixString(16)
+        .padLeft(6, '0')
+        .toUpperCase();
+    return '#$rgb';
+  }
+
+  // ===== fromJson: ดึงให้ครอบคลุมคีย์ของตารางจริง =====
+  factory Location.fromJson(Map<String, dynamic> json) {
+    // id
+    final id =
+        (json['location_id'] ?? json['locations_id'] ?? json['id'])
+            ?.toString() ??
+        '';
+
+    // ชุดคีย์ที่ถูกต้องตามตาราง
+    final name = (json['location_name'] ?? json['name'] ?? 'Unnamed Location')
+        .toString();
+    final address = (json['location_address'] ?? json['address'] ?? '')
+        .toString();
+    final description =
+        (json['location_description'] ?? json['description']) as String?;
+
+    // สี: รองรับทั้ง 'location_color' (ถูก) และ 'color' (ตกค้าง)
+    final colorRaw = json['location_color'] ?? json['color'];
+    final color = _parseColor(colorRaw);
+
+   
+
+    final createdAt = _parseDate(json['created_at']);
+
+    // สำคัญ: ดึง location_license จากคอลัมน์จริง
+    final license = (json['location_license'] ?? '').toString();
+
+    return Location(
+      id: id,
+      name: name,
+      address: address,
+      description: description,
+      color: color,
+      createdAt: createdAt,
+      location_license: license,
+    );
+  }
+
+  // ===== toJson: เขียนกลับด้วยคีย์ที่ตรงตาราง =====
   Map<String, dynamic> toJson() {
-    int to8bit(double v) => (v * 255.0).round() & 0xff;
-
-    int packColorARGB(Color color) {
-      final a = to8bit(color.a);
-      final r = to8bit(color.r);
-      final g = to8bit(color.g);
-      final b = to8bit(color.b);
-      return (a << 24) | (r << 16) | (g << 8) | b;
-    }
-
     return {
-      'locations_id': id,
+      'location_id': id,
       'location_name': name,
-      'address': address,
-      'description': description,
-      'color_location': packColorARGB(color),
-      'owner_email': ownerEmail,
-      'shared_with': sharedWith,
+      'location_address': address,
+      'location_description': description,
+      'location_color': _toWebHex(color),
       'created_at': createdAt.toIso8601String(),
+      'location_license': location_license,
     };
   }
 
-  /// ✅ ใช้สำหรับ clone object แล้วแก้บาง field
   Location copyWith({
     String? id,
     String? name,
     String? address,
     String? description,
     Color? color,
-    String? ownerEmail,
     List<Map<String, dynamic>>? sharedWith,
     DateTime? createdAt,
+    String? location_license,
   }) {
     return Location(
       id: id ?? this.id,
@@ -115,9 +123,8 @@ class Location {
       address: address ?? this.address,
       description: description ?? this.description,
       color: color ?? this.color,
-      ownerEmail: ownerEmail ?? this.ownerEmail,
-      sharedWith: sharedWith ?? this.sharedWith,
       createdAt: createdAt ?? this.createdAt,
+      location_license: location_license ?? this.location_license,
     );
   }
 }
