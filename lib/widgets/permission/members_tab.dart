@@ -34,7 +34,7 @@ void showSuccessMessage(BuildContext context, String message) {
     late OverlayEntry overlayEntry;
     overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        top: 10,
+        top: 90,
         right: 16,
         child: Material(
           color: Colors.transparent,

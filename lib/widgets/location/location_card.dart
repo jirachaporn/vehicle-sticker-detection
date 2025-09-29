@@ -79,9 +79,6 @@ class _LocationCardState extends State<LocationCard> {
         _canEdit = canEdit;
         _isAdmin = adminRole; // 👈 เก็บสถานะ Admin
       });
-      debugPrint(
-        '🔐 perms -> owner=$_isOwner, edit=$_canEdit, admin=$_isAdmin',
-      );
     } catch (e) {
       debugPrint('PERM error: $e');
       if (!mounted) return;

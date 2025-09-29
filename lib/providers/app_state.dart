@@ -111,7 +111,6 @@ class AppState extends ChangeNotifier {
         final role = rows.isNotEmpty ? (rows.first['user_role'] as String?) : null;
         isAdmin = role == 'admin';
       }
-      debugPrint('🔐 isAdmin=$isAdmin (uid=$uid)');
     } catch (e) {
       debugPrint('⚠️ loadMyRole error: $e');
       isAdmin = false;

@@ -10,6 +10,7 @@ import '../widgets/location/location_card.dart';
 import '../widgets/location/add_location_dialog.dart';
 import '../widgets/location/responsive_grid.dart';
 import '../widgets/loading.dart';
+import '../widgets/location/add_license_dialog.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -46,11 +47,32 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _showAddLocationDialog(BuildContext context) {
-    showDialog(
+  Future<void> _showAddLocationDialog(BuildContext context) async {
+    // 1) เปิด dialog แรกด้วย root navigator เสมอ
+    final result = await showDialog<Map<String, dynamic>?>(
       context: context,
-      builder: (context) => const AddLocationDialog(),
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (_) => const AddLocationDialog(),
     );
+
+    // 2) ได้ผลลัพธ์แล้ว ค่อยเปิด dialog ที่สอง จาก context ของหน้าแม่ (ยังมี Overlay อยู่)
+    if (result?['ok'] == true && context.mounted) {
+  
+      await Future.delayed(Duration.zero);
+
+      await showDialog(
+        context: Navigator.of(context, rootNavigator: true).context,
+        barrierDismissible: false,
+        useRootNavigator: true,
+        builder: (_) => AddLicenseDialog(
+          locationLicense: result!['locationLicense'] as String?,
+          isEdit: false,
+          locationData: null, 
+          initialLocation: null,
+        ),
+      );
+    }
   }
 
   void _showEditDialog(Location location) {

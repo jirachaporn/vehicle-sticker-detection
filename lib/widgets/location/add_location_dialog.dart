@@ -1,11 +1,11 @@
-import 'dart:convert';
+// add_location_dialog.dart
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/location.dart';
-import '../../providers/app_state.dart';
 import '../snackbar/fail_snackbar.dart';
 import '../snackbar/success_snackbar.dart';
+import 'package:uuid/uuid.dart';
+import 'add_license_dialog.dart';
 
 class AddLocationDialog extends StatefulWidget {
   final Location? initialLocation;
@@ -20,7 +20,10 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
   final _nameController = TextEditingController();
   final _addressController = TextEditingController();
   final _descriptionController = TextEditingController();
-   Color? _selectedColor;
+  Color? _selectedColor;
+
+  final uuid = const Uuid();
+  final supa = Supabase.instance.client;
 
   final List<Color> _colorOptions = const [
     Color(0xFF1565C0),
@@ -42,79 +45,62 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
       _addressController.text = initial.address;
       _descriptionController.text = initial.description ?? '';
       _selectedColor = initial.color;
-      } else {
-      _selectedColor = null; 
+    } else {
+      _selectedColor = null;
     }
-    
   }
 
-  bool _canSave() {
+  bool canSave() {
     return _nameController.text.trim().isNotEmpty &&
         _addressController.text.trim().isNotEmpty &&
         _selectedColor != null;
   }
 
-  String _toWebHex(Color c) {
-    final rgb = (c.value & 0xFFFFFF)
+  String toWebHex(Color c) {
+    final argb = c.toARGB32();
+    final rgb = (argb & 0xFFFFFF)
         .toRadixString(16)
         .padLeft(6, '0')
         .toUpperCase();
     return '#$rgb';
   }
 
-  Future<void> _handleSave() async {
-    final appState = context.read<AppState>();
+  Future<void> handleNext() async {
+    if (!canSave()) return;
+
     final isEdit = widget.initialLocation != null;
 
-  final pickedColor = _selectedColor!;
+    // เตรียมข้อมูล location (ยังไม่บันทึก)
     final locationData = {
-      "name": _nameController.text.trim(),
-      "address": _addressController.text.trim(),
-      "color": _toWebHex(pickedColor), 
-      "description": _descriptionController.text.trim().isNotEmpty
-          ? _descriptionController.text.trim()
-          : null,
-      "owner_email": appState.loggedInEmail,
-      "shared_with": widget.initialLocation?.sharedWith ?? [],
+      'location_name': _nameController.text.trim(),
+      'location_address': _addressController.text.trim(),
+      'location_color': toWebHex(_selectedColor!), // ใช้ฟังก์ชันที่ให้ไว้
+      'location_description': _descriptionController.text.trim().isEmpty
+          ? null
+          : _descriptionController.text.trim(),
     };
 
-    final url = isEdit
-        ? 'http://127.0.0.1:5000/update_location/${widget.initialLocation!.id}'
-        : 'http://127.0.0.1:5000/save_locations';
+    // ❌ ไม่ต้อง gen location_id ที่นี่ ปล่อยให้ AddLicenseDialog จัดการตอน insert
+    // ถ้าจำเป็นต้อง gen ที่นี่จริงๆ ต้องลบการ gen ใน AddLicenseDialog ออก
 
-    try {
-      final response = await (isEdit
-          ? http.put(
-              Uri.parse(url),
-              headers: {"Content-Type": "application/json"},
-              body: jsonEncode(locationData),
-            )
-          : http.post(
-              Uri.parse(url),
-              headers: {"Content-Type": "application/json"},
-              body: jsonEncode(locationData),
-            ));
+    if (!mounted) return;
 
-      if (!mounted) return;
+    // ปิด dialog นี้ก่อน
+    Navigator.of(context).pop();
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        await appState.loadLocations(appState.loggedInEmail);
-        Navigator.of(context).pop();
-        showSuccessMessage(
-          context,
-          isEdit
-              ? 'Location updated successfully!'
-              : 'Location added successfully!',
-        );
-      } else {
-        final error = jsonDecode(response.body);
-        showFailMessage(context, 'Failed', error["message"] ?? 'Unknown error');
-      }
-    } catch (e) {
-      if (mounted) {
-        showFailMessage(context, 'Error', e.toString());
-      }
-    }
+    // เปิด AddLicenseDialog
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AddLicenseDialog(
+        locationLicense: isEdit
+            ? widget.initialLocation!.location_license
+            : null,
+        isEdit: isEdit,
+        locationData: locationData,
+        initialLocation: widget.initialLocation,
+      ),
+    );
   }
 
   @override
@@ -154,7 +140,7 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
     late OverlayEntry overlayEntry;
     overlayEntry = OverlayEntry(
       builder: (context) => Positioned(
-        top: 10,
+        top: 90,
         right: 16,
         child: Material(
           color: Colors.transparent,
@@ -206,7 +192,6 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
               ),
               const SizedBox(height: 32),
 
-              // Location Name *
               TextField(
                 controller: _nameController,
                 decoration: InputDecoration(
@@ -231,11 +216,10 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                   ),
                   contentPadding: const EdgeInsets.all(16),
                 ),
-                onChanged: (_) => setState(() {}), // อัปเดตปุ่ม Save
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 24),
 
-              // Address *
               TextField(
                 controller: _addressController,
                 maxLines: 3,
@@ -261,11 +245,10 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                   ),
                   contentPadding: const EdgeInsets.all(16),
                 ),
-                onChanged: (_) => setState(() {}), // อัปเดตปุ่ม Save
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 24),
 
-              // Description (optional)
               TextField(
                 controller: _descriptionController,
                 decoration: InputDecoration(
@@ -290,7 +273,6 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
               ),
               const SizedBox(height: 24),
 
-              // Color (label with TextSpan)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -309,7 +291,6 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 12,
@@ -369,7 +350,7 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: _canSave() ? _handleSave : null,
+                      onPressed: canSave() ? handleNext : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2042BD),
                         foregroundColor: Colors.white,
@@ -380,11 +361,7 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                       ),
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.save, size: 16),
-                          SizedBox(width: 8),
-                          Text('Save'),
-                        ],
+                        children: [SizedBox(width: 8), Text('Next')],
                       ),
                     ),
                   ),
