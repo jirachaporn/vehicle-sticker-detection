@@ -221,31 +221,44 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   // --- Snackbars -------------------------------------------------------------
-  void showFailMessage(String title, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        elevation: 20,
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
-        duration: const Duration(seconds: 3),
-        padding: EdgeInsets.zero,
-        content: Align(
-          alignment: Alignment.topRight,
+  void showFailMessage(String errorMessage, dynamic error) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 10,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 50, // สูงกว่า dialog
           child: FailSnackbar(
-            title: title,
-            message: message,
-            onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            title: errorMessage,
+            message: error,
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
           ),
         ),
       ),
     );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (entry.mounted) entry.remove();
+    });
   }
 
   void showSuccessMessage(String message) {
-    final overlay = Overlay.of(context);
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
     late OverlayEntry entry;
     entry = OverlayEntry(
-      builder: (context) => Positioned(
+      builder: (_) => Positioned(
         top: 90,
         right: 16,
         child: Material(
@@ -253,13 +266,16 @@ class _SignUpPageState extends State<SignUpPage> {
           elevation: 20,
           child: SuccessSnackbar(
             message: message,
-            onClose: () => entry.remove(),
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
           ),
         ),
       ),
     );
+
     overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3), () {
+    Future.delayed(const Duration(seconds: 3)).then((_) {
       if (entry.mounted) entry.remove();
     });
   }
@@ -316,8 +332,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           setState(() => isUsernameTaken = false);
                         }
                       },
-                      onSaved: (v) =>
-                          userStr.username = (v ?? '').trim(),
+                      onSaved: (v) => userStr.username = (v ?? '').trim(),
                       decoration: InputDecoration(
                         labelText: 'Username',
                         errorText: isUsernameTaken
@@ -338,8 +353,7 @@ class _SignUpPageState extends State<SignUpPage> {
                     TextFormField(
                       controller: emailController,
                       onChanged: (v) => userStr.email = v,
-                      onSaved: (v) =>
-                          userStr.email = (v ?? '').trim(),
+                      onSaved: (v) => userStr.email = (v ?? '').trim(),
                       decoration: InputDecoration(
                         labelText: 'Email',
                         border: OutlineInputBorder(

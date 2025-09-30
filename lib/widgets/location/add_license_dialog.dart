@@ -11,7 +11,7 @@ import '../../providers/app_state.dart';
 import 'excel_import_dialog.dart';
 
 // ===================== ฟังก์ชัน (ไฟล์) =====================
-InputDecoration _fieldDec(String label, {String? hint}) {
+InputDecoration fieldDec(String label, {String? hint}) {
   return InputDecoration(
     labelText: label,
     hintText: hint,
@@ -619,7 +619,7 @@ class _PlateNumberRow extends StatelessWidget {
                       Expanded(
                         child: TextField(
                           controller: data.licenseText,
-                          decoration: _fieldDec(
+                          decoration: fieldDec(
                             'เลขทะเบียน *',
                             hint: 'e.g. 1กก1234',
                           ),
@@ -630,7 +630,7 @@ class _PlateNumberRow extends StatelessWidget {
                       Expanded(
                         child: TextField(
                           controller: data.licenseLocal,
-                          decoration: _fieldDec(
+                          decoration: fieldDec(
                             'จังหวัด *',
                             hint: 'e.g. กรุงเทพมหานคร',
                           ),
@@ -645,7 +645,7 @@ class _PlateNumberRow extends StatelessWidget {
                       Expanded(
                         child: TextField(
                           controller: data.carOwner,
-                          decoration: _fieldDec(
+                          decoration: fieldDec(
                             'ชื่อเจ้าของ *',
                             hint: 'e.g. นายเอ',
                           ),
@@ -656,7 +656,7 @@ class _PlateNumberRow extends StatelessWidget {
                       Expanded(
                         child: TextField(
                           controller: data.note,
-                          decoration: _fieldDec(
+                          decoration: fieldDec(
                             'หมายเหตุ',
                             hint: 'เช่น ห้อง B-1203',
                           ),

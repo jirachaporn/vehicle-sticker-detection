@@ -51,35 +51,47 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
         );
       } else {
         showFailMessage(
-          context,
           'OTP Failed',
           'Email not found or OTP not sent.',
         );
       }
     } catch (e) {
       setState(() => isLoading = false);
-      showFailMessage(context, 'Error', 'Unexpected error occurred.');
+      showFailMessage('Error', 'Unexpected error occurred.');
     }
   }
 
-  void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        elevation: 20,
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
-        duration: const Duration(seconds: 3),
-        padding: EdgeInsets.zero,
-        content: Align(
-          alignment: Alignment.topRight,
+  void showFailMessage(
+    String errorMessage,
+    dynamic error,
+  ) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 10,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 50, // สูงกว่า dialog
           child: FailSnackbar(
             title: errorMessage,
             message: error,
-            onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
           ),
         ),
       ),
     );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (entry.mounted) entry.remove();
+    });
   }
 
   @override

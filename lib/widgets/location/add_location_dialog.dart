@@ -111,11 +111,7 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
     super.dispose();
   }
 
-  void showFailMessage(
-    BuildContext context,
-    String errorMessage,
-    dynamic error,
-  ) {
+  void showFailMessage(String errorMessage, dynamic error) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         elevation: 20,
@@ -135,11 +131,14 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
     );
   }
 
-  void showSuccessMessage(BuildContext context, String message) {
-    final overlay = Overlay.of(context);
-    late OverlayEntry overlayEntry;
-    overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
+  void showSuccessMessage(String message) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
         top: 90,
         right: 16,
         child: Material(
@@ -148,15 +147,16 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
           child: SuccessSnackbar(
             message: message,
             onClose: () {
-              if (overlayEntry.mounted) overlayEntry.remove();
+              if (entry.mounted) entry.remove();
             },
           ),
         ),
       ),
     );
-    overlay.insert(overlayEntry);
+
+    overlay.insert(entry);
     Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (overlayEntry.mounted) overlayEntry.remove();
+      if (entry.mounted) entry.remove();
     });
   }
 

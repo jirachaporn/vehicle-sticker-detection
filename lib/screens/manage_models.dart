@@ -80,30 +80,43 @@ class _ManageModelsState extends State<ManageModels> {
 
       await fetchStickerModels();
     } catch (e) {
-      showFailMessage(context, 'Activate Model Failed', e.toString());
+      showFailMessage('Activate Model Failed', e.toString());
     } finally {
       setState(() => isLoading = false);
     }
   }
 
-  void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        elevation: 20,
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
-        duration: const Duration(seconds: 3),
-        padding: EdgeInsets.zero,
-        content: Align(
-          alignment: Alignment.topRight,
+  void showFailMessage(
+    String errorMessage,
+    dynamic error,
+  ) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 10,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 50, // สูงกว่า dialog
           child: FailSnackbar(
             title: errorMessage,
             message: error,
-            onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
           ),
         ),
       ),
     );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (entry.mounted) entry.remove();
+    });
   }
 
   void handleDelete(String modelId) async {
@@ -157,10 +170,7 @@ class _ManageModelsState extends State<ManageModels> {
 
     if (confirm != true) return;
 
-    final res = await supabase
-      .from('model')
-      .delete()
-      .eq('model_id', modelId);
+    final res = await supabase.from('model').delete().eq('model_id', modelId);
     debugPrint('🗑️ Delete result: $res');
     if (res == null || (res is List && res.isEmpty)) {
       debugPrint("❌ Nothing deleted — maybe wrong ID or permission issue?");
@@ -260,7 +270,7 @@ class _ManageModelsState extends State<ManageModels> {
           onActivate: () {},
           onDelete: () => handleDelete(activeModel!.id),
         ),
-      SizedBox(height: 32),
+        SizedBox(height: 32),
       ],
     );
   }
