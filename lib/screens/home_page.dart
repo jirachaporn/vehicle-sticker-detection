@@ -58,7 +58,6 @@ class _HomePageState extends State<HomePage> {
 
     // 2) ได้ผลลัพธ์แล้ว ค่อยเปิด dialog ที่สอง จาก context ของหน้าแม่ (ยังมี Overlay อยู่)
     if (result?['ok'] == true && context.mounted) {
-  
       await Future.delayed(Duration.zero);
 
       await showDialog(
@@ -68,7 +67,7 @@ class _HomePageState extends State<HomePage> {
         builder: (_) => AddLicenseDialog(
           locationLicense: result!['locationLicense'] as String?,
           isEdit: false,
-          locationData: null, 
+          locationData: null,
           initialLocation: null,
         ),
       );
@@ -150,24 +149,37 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void showFailMessage(String title, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        elevation: 20,
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
-        duration: const Duration(seconds: 3),
-        padding: EdgeInsets.zero,
-        content: Align(
-          alignment: Alignment.topRight,
+  void showFailMessage(
+    String errorMessage,
+    dynamic error,
+  ) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 10,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 50, // สูงกว่า dialog
           child: FailSnackbar(
-            title: title,
-            message: message,
-            onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            title: errorMessage,
+            message: error,
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
           ),
         ),
       ),
     );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (entry.mounted) entry.remove();
+    });
   }
 
   void showSuccessMessage(String message) {

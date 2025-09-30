@@ -9,25 +9,39 @@ import '../snackbar/fail_snackbar.dart';
 import '../snackbar/success_snackbar.dart';
 
 /// ===== Snackbar helpers (ต้องรับ BuildContext) =====
-void showFailMessage(BuildContext context, String title, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      elevation: 20,
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: Colors.transparent,
-      duration: const Duration(seconds: 3),
-      padding: EdgeInsets.zero,
-      content: Align(
-        alignment: Alignment.topRight,
-        child: FailSnackbar(
-          title: title,
-          message: message,
-          onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+void showFailMessage(
+    BuildContext context,
+    String errorMessage,
+    dynamic error,
+  ) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 10,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 50, // สูงกว่า dialog
+          child: FailSnackbar(
+            title: errorMessage,
+            message: error,
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (entry.mounted) entry.remove();
+    });
+  }
 
 void showSuccessMessage(BuildContext context, String message) {
   final overlay = Overlay.of(context);

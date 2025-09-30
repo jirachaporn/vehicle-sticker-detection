@@ -135,17 +135,15 @@ class _OTPPageState extends State<OTPPage> {
         // รีสตาร์ทตัวนับเวลา + โฟกัสช่องแรก
         _startCountdown();
         FocusScope.of(context).requestFocus(focusNodes[0]);
-        
       } else {
         showFailMessage(
-          context,
           'Error',
           'Failed to resend the code. Please try again.',
         );
       }
     } catch (e) {
       if (mounted) {
-        showFailMessage(context, 'Error', 'An unexpected error occurred');
+        showFailMessage('Error', 'An unexpected error occurred');
       }
     } finally {
       if (mounted) {
@@ -182,10 +180,10 @@ class _OTPPageState extends State<OTPPage> {
         setState(() {
           _isOtpIncorrect = true;
         });
-        showFailMessage(context, 'OTP Failed', 'Invalid or expired OTP.');
+        showFailMessage('OTP Failed', 'Invalid or expired OTP.');
       }
     } catch (e) {
-      showFailMessage(context, 'Error', 'Verification failed');
+      showFailMessage('Error', 'Verification failed');
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
@@ -193,24 +191,37 @@ class _OTPPageState extends State<OTPPage> {
     }
   }
 
-  void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        elevation: 20,
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
-        duration: const Duration(seconds: 3),
-        padding: EdgeInsets.zero,
-        content: Align(
-          alignment: Alignment.topRight,
+  void showFailMessage(
+    String errorMessage,
+    dynamic error,
+  ) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 10,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 50, // สูงกว่า dialog
           child: FailSnackbar(
             title: errorMessage,
             message: error,
-            onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
           ),
         ),
       ),
     );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (entry.mounted) entry.remove();
+    });
   }
 
   @override

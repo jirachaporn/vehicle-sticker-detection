@@ -46,7 +46,7 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
     });
 
     if (!isMatch) {
-      showFailMessage(context, 'Error', 'Passwords do not match');
+      showFailMessage('Error', 'Passwords do not match');
       return;
     }
 
@@ -65,24 +65,22 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
           MaterialPageRoute(builder: (_) => const SignInPage()),
           (route) => false,
         );
-      showSuccessMessage(context, 'Successfully!');
+        showSuccessMessage('Successfully!');
       });
     } else {
-      showFailMessage(
-        context,
-        'Failed to change password',
-        'Please try again later',
-      );
+      showFailMessage('Failed to change password', 'Please try again later');
     }
   }
 
-  void showSuccessMessage(BuildContext context, String message) {
-    final overlay = Overlay.of(context);
-    late OverlayEntry overlayEntry;
+  void showSuccessMessage(String message) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
 
-    overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        top: 10,
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        top: 90,
         right: 16,
         child: Material(
           color: Colors.transparent,
@@ -90,38 +88,47 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
           child: SuccessSnackbar(
             message: message,
             onClose: () {
-              if (overlayEntry.mounted) overlayEntry.remove();
+              if (entry.mounted) entry.remove();
             },
           ),
         ),
       ),
     );
 
-    overlay.insert(overlayEntry);
-
+    overlay.insert(entry);
     Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (overlayEntry.mounted) overlayEntry.remove();
+      if (entry.mounted) entry.remove();
     });
   }
 
-  void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        elevation: 20,
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
-        duration: const Duration(seconds: 3),
-        padding: EdgeInsets.zero,
-        content: Align(
-          alignment: Alignment.topRight,
+  void showFailMessage(String errorMessage, dynamic error) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 10,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 50, // สูงกว่า dialog
           child: FailSnackbar(
             title: errorMessage,
             message: error,
-            onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
           ),
         ),
       ),
     );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (entry.mounted) entry.remove();
+    });
   }
 
   @override

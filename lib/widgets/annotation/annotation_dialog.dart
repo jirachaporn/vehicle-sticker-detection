@@ -88,31 +88,44 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
     }
   }
 
-  void showFailMessage(String title, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        elevation: 20,
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
-        duration: const Duration(seconds: 3),
-        padding: EdgeInsets.zero,
-        content: Align(
-          alignment: Alignment.topRight,
+  void showFailMessage(String errorMessage, dynamic error) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 10,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 50, // สูงกว่า dialog
           child: FailSnackbar(
-            title: title,
-            message: message,
-            onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+            title: errorMessage,
+            message: error,
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
           ),
         ),
       ),
     );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (entry.mounted) entry.remove();
+    });
   }
 
   void showSuccessMessage(String message) {
-    final overlay = Overlay.of(context);
-    late OverlayEntry overlayEntry;
-    overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
         top: 90,
         right: 16,
         child: Material(
@@ -120,14 +133,17 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
           elevation: 20,
           child: SuccessSnackbar(
             message: message,
-            onClose: () => overlayEntry.remove(),
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
           ),
         ),
       ),
     );
-    overlay.insert(overlayEntry);
-    Future.delayed(const Duration(seconds: 3), () {
-      if (overlayEntry.mounted) overlayEntry.remove();
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (entry.mounted) entry.remove();
     });
   }
 

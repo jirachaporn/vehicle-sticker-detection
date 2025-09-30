@@ -21,32 +21,40 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
   PlatformFile? _picked;
   List<Map<String, String>> _previewRows = [];
 
-  void showFailMessage(
-    BuildContext context,
+void showFailMessage(
     String errorMessage,
     dynamic error,
   ) {
-    final ctx = Navigator.of(context, rootNavigator: true).context;
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(
-        elevation: 20,
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
-        duration: const Duration(seconds: 3),
-        padding: EdgeInsets.zero,
-        content: Align(
-          alignment: Alignment.topRight,
+    final nav = Navigator.of(context, rootNavigator: true);
+    final overlay = nav.overlay;
+    if (overlay == null) return;
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        bottom: 10,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 50, // สูงกว่า dialog
           child: FailSnackbar(
             title: errorMessage,
             message: error,
-            onClose: () => ScaffoldMessenger.of(ctx).hideCurrentSnackBar(),
+            onClose: () {
+              if (entry.mounted) entry.remove();
+            },
           ),
         ),
       ),
     );
+
+    overlay.insert(entry);
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      if (entry.mounted) entry.remove();
+    });
   }
 
-  void showSuccessMessage(BuildContext context, String message) {
+  void showSuccessMessage(String message) {
     final nav = Navigator.of(context, rootNavigator: true);
     final overlay = nav.overlay;
     if (overlay == null) return;
@@ -97,18 +105,18 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
       if (!mounted) return;
 
       if (context.mounted) {
-        showSuccessMessage(context, 'Saved example to: ${outFile.path}');
+        showSuccessMessage('Saved example to: ${outFile.path}');
       }
     } catch (e) {
       // ❌ แจ้งเตือนล้มเหลว
       if (context.mounted) {
-        showFailMessage(context, "Download failed", e.toString());
+        showFailMessage("Download failed", e.toString());
       }
     }
   }
 
   // เปิดไฟล์เลือก .xlsx/.xls
-  Future<void> _pickFile() async {
+  Future<void> pickFile() async {
     final res = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx', 'xls'],
@@ -121,11 +129,11 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
       _previewRows.clear();
     });
 
-    await _parsePicked();
+    await parsePicked();
   }
 
   // อ่านไฟล์ที่เลือกแล้วแปลงเป็น list ของ map
-  Future<void> _parsePicked() async {
+  Future<void> parsePicked() async {
     if (_picked == null) return;
     setState(() => _parsing = true);
     try {
@@ -135,31 +143,40 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
       } else if (_picked!.path != null) {
         bytes = await File(_picked!.path!).readAsBytes();
       } else {
-        throw 'ไม่พบข้อมูลไฟล์';
+        throw 'File information not found';
       }
 
       final excel = Excel.decodeBytes(bytes);
       final table = excel.tables.isNotEmpty ? excel.tables.values.first : null;
       if (table == null || table.rows.isEmpty) {
-        throw 'ไฟล์ไม่มีข้อมูล';
+        throw 'File has no data';
       }
 
-      // หา header (รองรับ: license_text, license_local, car_owner, note)
-      int startRow = 0;
+      // ==== ตรวจ header ====
       final header = table.rows.first
           .map((c) => (c?.value?.toString() ?? '').trim().toLowerCase())
           .toList();
-      bool looksHeader = header.any(
-        (h) =>
-            ['license_text', 'license_local', 'car_owner', 'note'].contains(h),
-      );
 
-      int idxText = _findCol(header, 'license_text');
-      int idxLocal = _findCol(header, 'license_local');
-      int idxOwner = _findCol(header, 'car_owner');
-      int idxNote = _findCol(header, 'note');
+      const requiredCols = [
+        'license_text',
+        'license_local',
+        'car_owner',
+        'note',
+      ];
 
-      if (looksHeader) startRow = 1;
+      // check ต้องครบทุกคอลัมน์
+      final missing = requiredCols.where((c) => !header.contains(c)).toList();
+      if (missing.isNotEmpty) {
+        throw 'Format not correct: Missing ${missing.join(", ")}';
+      }
+
+      // ==== mapping column ====
+      final idxText = header.indexOf('license_text');
+      final idxLocal = header.indexOf('license_local');
+      final idxOwner = header.indexOf('car_owner');
+      final idxNote = header.indexOf('note');
+
+      int startRow = 1; // ข้าม header
 
       String cell(List<Data?> row, int i) {
         if (i < 0 || i >= row.length) return '';
@@ -170,12 +187,10 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
       final out = <Map<String, String>>[];
       for (int r = startRow; r < table.rows.length; r++) {
         final row = table.rows[r];
-        final licenseText = idxText >= 0
-            ? cell(row, idxText)
-            : (row.isNotEmpty ? cell(row, 0) : '');
-        final licenseLocal = idxLocal >= 0 ? cell(row, idxLocal) : '';
-        final carOwner = idxOwner >= 0 ? cell(row, idxOwner) : '';
-        final note = idxNote >= 0 ? cell(row, idxNote) : '';
+        final licenseText = cell(row, idxText);
+        final licenseLocal = cell(row, idxLocal);
+        final carOwner = cell(row, idxOwner);
+        final note = cell(row, idxNote);
 
         if ([
           licenseText,
@@ -183,7 +198,7 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
           carOwner,
           note,
         ].every((e) => e.isEmpty)) {
-          continue;
+          continue; // ข้ามแถวว่าง
         }
 
         out.add({
@@ -194,25 +209,28 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
         });
       }
 
+      if (out.isEmpty) {
+        throw 'No valid rows found';
+      }
+
       setState(() => _previewRows = out);
+      showSuccessMessage("Import Successfully!");
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+      showFailMessage('Import failed', e.toString());
     } finally {
       if (mounted) setState(() => _parsing = false);
     }
   }
 
-  int _findCol(List<String> header, String key) {
+  int findCol(List<String> header, String key) {
     for (int i = 0; i < header.length; i++) {
       if (header[i] == key) return i;
     }
     return -1;
   }
 
-  void _removePicked() {
+  void removePicked() {
     setState(() {
       _picked = null;
       _previewRows.clear();
@@ -220,13 +238,7 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
   }
 
   // กด Confirm → ส่งผลลัพธ์กลับไปหน้าหลัก
-  void _confirm() {
-    if (_previewRows.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ยังไม่มีข้อมูลเพื่อนำเข้า')),
-      );
-      return;
-    }
+  void confirm() {
     Navigator.of(context).pop<List<Map<String, String>>>(_previewRows);
   }
 
@@ -317,7 +329,7 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
 
                     // ปุ่ม Browse (Outlined เขียว Excel)
                     OutlinedButton(
-                      onPressed: _parsing ? null : _pickFile,
+                      onPressed: _parsing ? null : pickFile,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,
                         backgroundColor: const Color(0xFF2563EB),
@@ -361,11 +373,11 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
                             const SizedBox(width: 10),
                             const Text(
                               'Uploaded',
-                              style: TextStyle(color: Color(0xFF4CAF50)),
+                              style: TextStyle(color: Color(0xFF2563EB)),
                             ),
                             const SizedBox(width: 8),
                             InkWell(
-                              onTap: _removePicked,
+                              onTap: removePicked,
                               borderRadius: BorderRadius.circular(20),
                               child: const Padding(
                                 padding: EdgeInsets.all(4),
@@ -409,7 +421,7 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
                       onPressed: () => Navigator.of(context).pop(),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        foregroundColor: Colors.red, 
+                        foregroundColor: Colors.red,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
@@ -422,7 +434,7 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: canConfirm ? _confirm : null,
+                      onPressed: canConfirm ? confirm : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Color(0xFF217346),
                         foregroundColor: Colors.white,
