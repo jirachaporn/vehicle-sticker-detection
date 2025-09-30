@@ -193,10 +193,10 @@ class _OTPPageState extends State<OTPPage> {
     }
   }
 
-  showFailMessage(BuildContext context, String errorMessage, dynamic error) {
+  void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        elevation: 0,
+        elevation: 20,
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.transparent,
         duration: const Duration(seconds: 3),

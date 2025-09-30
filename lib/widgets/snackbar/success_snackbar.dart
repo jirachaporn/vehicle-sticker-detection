@@ -49,7 +49,7 @@ class SuccessSnackbar extends StatelessWidget {
               child: Text(
                 message,
                 style: const TextStyle(
-                  fontSize: 18,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: Colors.black87,
                 ),

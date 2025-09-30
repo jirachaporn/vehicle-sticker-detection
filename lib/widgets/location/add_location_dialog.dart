@@ -118,7 +118,7 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
   ) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        elevation: 0,
+        elevation: 20,
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.transparent,
         duration: const Duration(seconds: 3),
@@ -144,6 +144,7 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
         right: 16,
         child: Material(
           color: Colors.transparent,
+          elevation: 20,
           child: SuccessSnackbar(
             message: message,
             onClose: () {
@@ -360,12 +361,16 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                       onPressed: () => Navigator.of(context).pop(),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
+                        foregroundColor: Colors.red,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        side: const BorderSide(color: Colors.grey),
+                        side: const BorderSide(color: Colors.red),
                       ),
-                      child: const Text('Cancel'),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.red),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),

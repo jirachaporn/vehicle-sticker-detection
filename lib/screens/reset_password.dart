@@ -76,7 +76,7 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
     }
   }
 
-  showSuccessMessage(BuildContext context, String message) {
+  void showSuccessMessage(BuildContext context, String message) {
     final overlay = Overlay.of(context);
     late OverlayEntry overlayEntry;
 
@@ -86,6 +86,7 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
         right: 16,
         child: Material(
           color: Colors.transparent,
+          elevation: 20,
           child: SuccessSnackbar(
             message: message,
             onClose: () {
@@ -103,10 +104,10 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
     });
   }
 
-  showFailMessage(BuildContext context, String errorMessage, dynamic error) {
+  void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        elevation: 0,
+        elevation: 20,
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.transparent,
         duration: const Duration(seconds: 3),
