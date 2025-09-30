@@ -316,7 +316,7 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
         '$dirPath${Platform.pathSeparator}${safeModel.isEmpty ? widget.modelId : safeModel}.zip';
     final zipData = ZipEncoder().encode(archive);
     final outFile = File(zipPath);
-    await outFile.writeAsBytes(zipData);
+    await outFile.writeAsBytes(zipData!);
 
     if (!mounted) return;
     setState(() => downloading = false);

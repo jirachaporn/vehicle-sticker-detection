@@ -248,7 +248,7 @@ class _HomePageState extends State<HomePage> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(
-                              color: Colors.blue,
+                              color: Color(0xFF2563EB),
                               width: 1,
                             ),
                           ),

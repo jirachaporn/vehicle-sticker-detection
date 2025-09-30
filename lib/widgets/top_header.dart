@@ -35,7 +35,7 @@ class TopHeader extends StatelessWidget {
             style: TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.bold,
-              color: Color.fromARGB(221, 25, 43, 145),
+              color: Color(0xFF2563EB),
             ),
           ),
           const Spacer(),
