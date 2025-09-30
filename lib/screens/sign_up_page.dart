@@ -224,7 +224,7 @@ class _SignUpPageState extends State<SignUpPage> {
   void showFailMessage(String title, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        elevation: 0,
+        elevation: 20,
         behavior: SnackBarBehavior.floating,
         backgroundColor: Colors.transparent,
         duration: const Duration(seconds: 3),
@@ -250,6 +250,7 @@ class _SignUpPageState extends State<SignUpPage> {
         right: 16,
         child: Material(
           color: Colors.transparent,
+          elevation: 20,
           child: SuccessSnackbar(
             message: message,
             onClose: () => entry.remove(),

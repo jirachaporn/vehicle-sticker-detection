@@ -58,7 +58,7 @@ class FailSnackbar extends StatelessWidget {
                       child: Text(
                         title,
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
                         ),
@@ -76,7 +76,7 @@ class FailSnackbar extends StatelessWidget {
                 Text(
                   message,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 12,
                     color: Colors.black87,
                   ),
                 ),

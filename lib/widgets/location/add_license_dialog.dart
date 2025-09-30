@@ -8,7 +8,7 @@ import '../snackbar/success_snackbar.dart';
 import '../snackbar/fail_snackbar.dart';
 import '../../models/location.dart';
 import '../../providers/app_state.dart';
-
+import 'excel_import_dialog.dart';
 
 // ===================== ฟังก์ชัน (ไฟล์) =====================
 InputDecoration _fieldDec(String label, {String? hint}) {
@@ -32,7 +32,7 @@ void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
   final ctx = Navigator.of(context, rootNavigator: true).context;
   ScaffoldMessenger.of(ctx).showSnackBar(
     SnackBar(
-      elevation: 0,
+      elevation: 20,
       behavior: SnackBarBehavior.floating,
       backgroundColor: Colors.transparent,
       duration: const Duration(seconds: 3),
@@ -61,6 +61,7 @@ void showSuccessMessage(BuildContext context, String message) {
       right: 16,
       child: Material(
         color: Colors.transparent,
+        elevation: 20,
         child: SuccessSnackbar(
           message: message,
           onClose: () {
@@ -312,9 +313,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
     return Dialog(
       backgroundColor: Colors.white,
       insetPadding: const EdgeInsets.all(24),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Theme(
         data: theme.copyWith(
           colorScheme: theme.colorScheme.copyWith(
@@ -359,6 +358,55 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                           ),
                         ),
                         const Spacer(),
+
+                        // ==== ปุ่มอัพโหลด Excel ====
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final result =
+                                await showDialog<List<Map<String, String>>>(
+                                  context: context,
+                                  builder: (_) => const ExcelImportDialog(),
+                                );
+
+                            if (result != null &&
+                                result.isNotEmpty &&
+                                mounted) {
+                              setState(() {
+                                _rows.addAll(
+                                  result.map(
+                                    (m) => _PlateRowData(
+                                      licenseText: TextEditingController(
+                                        text: m['license_text'] ?? '',
+                                      ),
+                                      licenseLocal: TextEditingController(
+                                        text: m['license_local'] ?? '',
+                                      ),
+                                      carOwner: TextEditingController(
+                                        text: m['car_owner'] ?? '',
+                                      ),
+                                      note: TextEditingController(
+                                        text: m['note'] ?? '',
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              });
+                            }
+                          },
+                          icon: const Icon(Icons.upload_file),
+                          label: const Text('Upload Excel'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(
+                              0xFF217346,
+                            ), // ตัวอักษร + ไอคอน
+                            side: const BorderSide(
+                              color: Color(0xFF217346),
+                            ), // เส้นขอบ
+                          ),
+                        ),
+
+                        const SizedBox(width: 8),
+
                         IconButton(
                           onPressed: () => Navigator.of(context).pop(),
                           icon: const Icon(Icons.close),
@@ -366,6 +414,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                         ),
                       ],
                     ),
+
                     const SizedBox(height: 6),
                     const Align(
                       alignment: Alignment.centerLeft,
@@ -400,7 +449,9 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                         onPressed: _addRow,
                         icon: const Icon(Icons.add_circle_outline),
                         label: const Text('Add'),
-                        style: TextButton.styleFrom(foregroundColor: Color(0xFF2563EB)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Color(0xFF2563EB),
+                        ),
                       ),
                     ),
 
@@ -411,9 +462,24 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Cancel'),
+                            style: ButtonStyle(
+                              padding: const WidgetStatePropertyAll(
+                                EdgeInsets.symmetric(vertical: 16),
+                              ),
+                              shape: WidgetStatePropertyAll(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              foregroundColor: const WidgetStatePropertyAll(Colors.red,),
+                              side: const WidgetStatePropertyAll( BorderSide(color: Colors.red),),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                            ), 
                           ),
                         ),
+
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton(
