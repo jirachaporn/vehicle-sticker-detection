@@ -1,18 +1,16 @@
-// import
+// ===================== import =====================
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+
 import '../snackbar/success_snackbar.dart';
 import '../snackbar/fail_snackbar.dart';
 import '../../models/location.dart';
-import 'package:provider/provider.dart';
 import '../../providers/app_state.dart';
-import 'package:uuid/uuid.dart';
 
-// ตัวแปร
-const _kPrimary = Color(0xFF2563EB);
-const _kRadius = 16.0;
 
-// ฟังก์ชัน (utils เล็กๆ)
+// ===================== ฟังก์ชัน (ไฟล์) =====================
 InputDecoration _fieldDec(String label, {String? hint}) {
   return InputDecoration(
     labelText: label,
@@ -24,13 +22,12 @@ InputDecoration _fieldDec(String label, {String? hint}) {
       borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
     ),
     focusedBorder: OutlineInputBorder(
-      borderSide: const BorderSide(color: _kPrimary, width: 2),
+      borderSide: const BorderSide(color: Color(0xFF2563EB), width: 2),
       borderRadius: BorderRadius.circular(12),
     ),
   );
 }
 
-// ===== แจ้งเตือนตามที่ให้มา =====
 void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
   final ctx = Navigator.of(context, rootNavigator: true).context;
   ScaffoldMessenger.of(ctx).showSnackBar(
@@ -80,7 +77,7 @@ void showSuccessMessage(BuildContext context, String message) {
   });
 }
 
-// ตัวหลัก
+// ===================== class (ตัวหลัก) =====================
 class AddLicenseDialog extends StatefulWidget {
   final String? locationLicense;
   final bool isEdit;
@@ -99,96 +96,81 @@ class AddLicenseDialog extends StatefulWidget {
   State<AddLicenseDialog> createState() => _AddLicenseDialogState();
 }
 
-// ตัวแปรของ State
+// ===================== ตัวแปร/ฟังก์ชันใน class =====================
 class _AddLicenseDialogState extends State<AddLicenseDialog> {
   final supa = Supabase.instance.client;
+  final uuid = const Uuid();
 
-  final List<_PlateRowData> _rows = [_PlateRowData()];
-  final List<String> _deletedIds = [];
+  final List<_PlateRowData> _rows = <_PlateRowData>[_PlateRowData()];
+  final List<String> _deletedIds = <String>[];
+
   bool _loading = false;
   bool _saving = false;
-  final uuid = Uuid();
 
   bool get _canSave => _rows.isNotEmpty && _rows.every((r) => r.isValid);
 
-  // ฟังก์ชัน
   @override
   void initState() {
     super.initState();
-    if (widget.isEdit) loadExisting();
+    if (widget.isEdit) {
+      loadExisting();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final r in _rows) {
+      r.dispose();
+    }
+    super.dispose();
   }
 
   Future<void> loadExisting() async {
     setState(() => _loading = true);
     try {
-      if (widget.locationLicense == null) {
+      final key = widget.locationLicense;
+      if (key == null || key.isEmpty) {
         _rows
           ..clear()
           ..add(_PlateRowData());
-        debugPrint('ℹ️ no key provided; add empty row');
         return;
       }
-      String? license = widget.locationLicense!;
-      
-      // 2) ยิง query ด้วย location_license ที่ได้
-      debugPrint('🔍 query by location_license: $license');
+
       final data = await supa
           .from('license_plate')
           .select('license_id, license_text, license_local, car_owner, note')
-          .eq('location_license', license)
+          .eq('location_license', key)
           .order('license_text', ascending: true);
 
-      debugPrint('🔍 raw result: $data');
-
-      // 3) แปลงและยัดลงฟอร์ม
       final list = (data as List).cast<Map<String, dynamic>>();
       _rows
         ..clear()
         ..addAll(
           list.isEmpty ? [_PlateRowData()] : list.map(_PlateRowData.fromMap),
         );
-
-      debugPrint('📦 loaded plates: ${list.length}');
-      if (list.isNotEmpty) debugPrint('👉 first: ${list.first}');
     } catch (e) {
-      if (mounted) {
-        showFailMessage(context, 'โหลดข้อมูลล้มเหลว', e.toString());
-      }
+      if (!mounted) return;
+      showFailMessage(context, 'Load failed', 'Unable to load data');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  // แทนที่ฟังก์ชัน _savePlates ใน add_license_dialog.dart
   Future<void> _savePlates() async {
-    debugPrint('🚀 _savePlates() started');
-    debugPrint('🔍 _canSave: $_canSave');
-    debugPrint('🔍 _rows.length: ${_rows.length}');
-
-    if (!_canSave) {
-      showFailMessage(
-        context,
-        'กรอกข้อมูลไม่ครบ',
-        'กรอกข้อมูลให้ครบอย่างน้อย 1 แถว',
-      );
-      return;
-    }
-
     setState(() => _saving = true);
 
-    final supa = Supabase.instance.client;
+    // ดึง appState ด้วย context ก่อน await ใด ๆ เพื่อเลี่ยง lint
     final appState = Provider.of<AppState>(context, listen: false);
 
     try {
-      // =================== โหมดแก้ไข ===================
+      // ===== โหมดแก้ไข =====
       if (widget.isEdit &&
           widget.locationLicense != null &&
           widget.initialLocation != null) {
-        final currentLocationId =
-            widget.initialLocation!.id; // ใช้ field ตามโมเดลคุณ
+        final currentLocationId = widget.initialLocation!.id;
         final currentLocationLicense = widget.locationLicense!;
 
-        // UPDATE แถวเดิม
+        // UPDATE
         for (final r in _rows.where((e) => e.licenseId != null)) {
           await supa
               .from('license_plate')
@@ -203,8 +185,8 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
               .select('license_id');
         }
 
-        // INSERT แถวใหม่
-        final newRows = _rows
+        // INSERT ใหม่
+        final newcomers = _rows
             .where((e) => e.licenseId == null)
             .map(
               (r) => {
@@ -216,20 +198,22 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
               },
             )
             .toList();
-        if (newRows.isNotEmpty) {
-          await supa.from('license_plate').insert(newRows).select('license_id');
+        if (newcomers.isNotEmpty) {
+          await supa
+              .from('license_plate')
+              .insert(newcomers)
+              .select('license_id');
         }
 
-        // DELETE แถวที่ลบ
+        // DELETE
         if (_deletedIds.isNotEmpty) {
           await supa
               .from('license_plate')
               .delete()
-              .inFilter('license_id', _deletedIds)
-              .select('license_id');
+              .inFilter('license_id', _deletedIds);
         }
 
-        // UPDATE location (ถ้าส่งมา)
+        // UPDATE locations ถ้ามีข้อมูลมา
         if (widget.locationData != null) {
           await supa
               .from('locations')
@@ -238,19 +222,14 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
               .select('location_id');
         }
       }
-      // =================== โหมดสร้างใหม่ ===================
+      // ===== โหมดสร้างใหม่ (ให้ trigger gen location_license) =====
       else if (widget.locationData != null) {
-        final supa = Supabase.instance.client;
-        final String newLocationId = uuid.v4();
+        final newLocationId = uuid.v4();
 
-        // 1) INSERT locations (อย่าใส่ location_license — DB จะ gen LI0000xx เอง)
-        final locRow = {...widget.locationData!, 'location_id': newLocationId};
-        locRow.remove('location_license'); // กันลืม
-        await supa.from('locations').insert(locRow); // ห้าม .select() ตรงนี้
+        final locRow = {...widget.locationData!, 'location_id': newLocationId}
+          ..remove('location_license');
+        await supa.from('locations').insert(locRow);
 
-        // 2) (ไม่ต้อง insert location_members) -> ให้ trigger handle_new_location ทำงานเอง
-
-        // 3) ตอนนี้มีสิทธิ์ SELECT แล้ว (เพราะ trigger ใส่สมาชิกให้เรา)
         final licRes = await supa
             .from('locations')
             .select('location_license')
@@ -262,7 +241,6 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
           throw Exception('ไม่พบ location_license (trigger ไม่ทำงาน?)');
         }
 
-        // 4) INSERT license_plate ทั้งหมด โดยใช้ license จาก DB
         final plateRows = _rows
             .map(
               (r) => {
@@ -274,12 +252,11 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
               },
             )
             .toList();
-
         if (plateRows.isNotEmpty) {
           await supa.from('license_plate').insert(plateRows);
         }
       }
-      // =================== เพิ่มป้ายทะเบียนให้ location ที่มีอยู่แล้ว ===================
+      // ===== เพิ่มป้ายใน location ที่มีอยู่ =====
       else if (!widget.isEdit && widget.locationLicense != null) {
         final plateRows = _rows
             .map(
@@ -297,19 +274,19 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
         }
       }
 
-      // โหลดข้อมูลใหม่ + แจ้งผล
+      // รีโหลด state (ไม่ใช้ context เพิ่ม)
       await appState.loadLocations(appState.loggedInEmail);
+
       if (!mounted) return;
       final rootCtx = Navigator.of(context, rootNavigator: true).context;
-      showSuccessMessage(
-        rootCtx,
-        widget.isEdit ? 'บันทึกการแก้ไขสำเร็จ!' : 'เพิ่มป้ายทะเบียนสำเร็จ!',
-      );
-      if (mounted) Navigator.of(context).pop();
+      showSuccessMessage(rootCtx, 'Changes saved successfully!');
+
+      if (!mounted) return;
+      // ignore: use_build_context_synchronously
+      Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) {
-        showFailMessage(context, 'เพิ่ม license_plate ไม่สำเร็จ', e.toString());
-      }
+      if (!mounted) return;
+      showFailMessage(context, 'Save failed', 'Could not add license_plate');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -319,31 +296,15 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
 
   void _removeRow(int index) {
     if (_rows.length == 1) {
-      showFailMessage(context, 'ลบไม่ได้', 'ต้องมีอย่างน้อย 1 แถว');
+      showFailMessage(context, 'Cannot delete', 'At least 1 row is required');
       return;
     }
     final removed = _rows.removeAt(index);
-    if (removed.licenseId != null) {
-      _deletedIds.add(removed.licenseId!);
-    }
+    if (removed.licenseId != null) _deletedIds.add(removed.licenseId!);
     setState(() {});
   }
 
-  void _moveUp(int i) {
-    if (i <= 0) return;
-    final item = _rows.removeAt(i);
-    _rows.insert(i - 1, item);
-    setState(() {});
-  }
-
-  void _moveDown(int i) {
-    if (i >= _rows.length - 1) return;
-    final item = _rows.removeAt(i);
-    _rows.insert(i + 1, item);
-    setState(() {});
-  }
-
-  // Widget build(Main)
+  // ===================== Widget หลัก =====================
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -352,17 +313,17 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
       backgroundColor: Colors.white,
       insetPadding: const EdgeInsets.all(24),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(_kRadius),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Theme(
         data: theme.copyWith(
           colorScheme: theme.colorScheme.copyWith(
-            primary: _kPrimary,
-            secondary: _kPrimary,
+            primary: Color(0xFF2563EB),
+            secondary: Color(0xFF2563EB),
           ),
           inputDecorationTheme: theme.inputDecorationTheme.copyWith(
             focusedBorder: const OutlineInputBorder(
-              borderSide: BorderSide(color: _kPrimary, width: 2),
+              borderSide: BorderSide(color: Color(0xFF2563EB), width: 2),
             ),
           ),
         ),
@@ -405,7 +366,6 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 6),
                     const Align(
                       alignment: Alignment.centerLeft,
@@ -416,7 +376,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Rows (numbered)
+                    // Rows
                     Flexible(
                       child: SingleChildScrollView(
                         child: Column(
@@ -425,8 +385,6 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                               displayIndex: i + 1,
                               data: _rows[i],
                               onRemove: () => _removeRow(i),
-                              onMoveUp: () => _moveUp(i),
-                              onMoveDown: () => _moveDown(i),
                               onChanged: () => setState(() {}),
                             );
                           }),
@@ -436,20 +394,18 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
 
                     const SizedBox(height: 12),
 
-                    // Add row
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
                         onPressed: _addRow,
                         icon: const Icon(Icons.add_circle_outline),
                         label: const Text('Add'),
-                        style: TextButton.styleFrom(foregroundColor: _kPrimary),
+                        style: TextButton.styleFrom(foregroundColor: Color(0xFF2563EB)),
                       ),
                     ),
 
                     const SizedBox(height: 8),
 
-                    // Actions
                     Row(
                       children: [
                         Expanded(
@@ -462,7 +418,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                         Expanded(
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _kPrimary,
+                              backgroundColor: Color(0xFF2563EB),
                               foregroundColor: Colors.white,
                             ),
                             onPressed: _saving
@@ -490,7 +446,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
   }
 }
 
-// วิดเจ็ตย่อยๆ
+// ===================== Widget ย่อย =====================
 class _PlateRowData {
   final String? licenseId; // null = แถวใหม่
   final TextEditingController licenseText;
@@ -527,22 +483,25 @@ class _PlateRowData {
       note: TextEditingController(text: (m['note'] as String?) ?? ''),
     );
   }
+
+  void dispose() {
+    licenseText.dispose();
+    licenseLocal.dispose();
+    carOwner.dispose();
+    note.dispose();
+  }
 }
 
 class _PlateNumberRow extends StatelessWidget {
   final int displayIndex;
   final _PlateRowData data;
   final VoidCallback onRemove;
-  final VoidCallback onMoveUp;
-  final VoidCallback onMoveDown;
   final VoidCallback onChanged;
 
   const _PlateNumberRow({
     required this.displayIndex,
     required this.data,
     required this.onRemove,
-    required this.onMoveUp,
-    required this.onMoveDown,
     required this.onChanged,
   });
 
@@ -553,7 +512,8 @@ class _PlateNumberRow extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(_kRadius),
+          // ใช้ค่า radius ตรง ๆ กันเคสชื่อหาย
+          borderRadius: BorderRadius.circular(16.0),
           border: Border.all(color: const Color(0xFFE5E7EB)),
           boxShadow: const [
             BoxShadow(
@@ -594,7 +554,7 @@ class _PlateNumberRow extends StatelessWidget {
                         child: TextField(
                           controller: data.licenseText,
                           decoration: _fieldDec(
-                            'เลขทะเบียน ',
+                            'เลขทะเบียน *',
                             hint: 'e.g. 1กก1234',
                           ),
                           onChanged: (_) => onChanged(),
@@ -639,41 +599,18 @@ class _PlateNumberRow extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (data.licenseId != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'ID: ${data.licenseId}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
 
             const SizedBox(width: 8),
 
-            // ปุ่มของแถว
+            // ปุ่มล่างสุด
             Column(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 IconButton(
-                  tooltip: 'ย้ายขึ้น',
-                  onPressed: onMoveUp,
-                  icon: const Icon(Icons.arrow_upward, size: 20),
-                ),
-                IconButton(
-                  tooltip: 'ย้ายลง',
-                  onPressed: onMoveDown,
-                  icon: const Icon(Icons.arrow_downward, size: 20),
-                ),
-                IconButton(
-                  tooltip: 'ลบแถว',
+                  tooltip: 'Delete row',
                   onPressed: onRemove,
                   icon: const Icon(Icons.delete_outline, color: Colors.red),
                 ),

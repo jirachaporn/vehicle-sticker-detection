@@ -620,7 +620,7 @@ def get_locations():
         if _is_admin(user_email):
             print(f"🔑 Admin detected: {user_email}, returning ALL locations")
             loc_res = supabase.table("locations") \
-                .select("location_id, location_name, location_address, location_description, location_color, created_at") \
+                .select("location_id, location_name, location_address, location_description, location_color, created_at, location_license") \
                 .order("created_at", desc=True) \
                 .execute()
             locations = loc_res.data or []
@@ -636,7 +636,7 @@ def get_locations():
             if not loc_ids:
                 return jsonify([]), 200
             loc_res = supabase.table("locations") \
-                .select("location_id, location_name, location_address, location_description, location_color, created_at") \
+                .select("location_id, location_name, location_address, location_description, location_color, created_at, location_license") \
                 .in_("location_id", loc_ids) \
                 .order("created_at", desc=True) \
                 .execute()
@@ -652,6 +652,7 @@ def get_locations():
                 "description": loc.get("location_description"),
                 "color": loc.get("location_color"),
                 "created_at": loc.get("created_at"),
+                "location_license": loc.get("location_license"),
             })
 
         print(f"✅ Found {len(result)} locations for {user_email}")

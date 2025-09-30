@@ -212,7 +212,14 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                   ),
                   hintText: 'e.g., ABC Apartment',
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(
+                      color: Color(0xFF2563EB),
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   contentPadding: const EdgeInsets.all(16),
                 ),
@@ -241,7 +248,14 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                   ),
                   hintText: 'Full address',
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(
+                      color: Color(0xFF2563EB),
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   contentPadding: const EdgeInsets.all(16),
                 ),
@@ -266,7 +280,14 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
                   ),
                   hintText: 'Additional details',
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(
+                      color: Color(0xFF2563EB),
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   contentPadding: const EdgeInsets.all(16),
                 ),
