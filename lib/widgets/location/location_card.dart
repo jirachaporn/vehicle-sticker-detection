@@ -1,4 +1,3 @@
-// lib/widgets/location_card.dart
 import 'package:flutter/material.dart';
 import 'package:myproject/providers/app_state.dart';
 import 'package:provider/provider.dart';
@@ -8,7 +7,6 @@ import '../../providers/permission_provider.dart';
 class LocationCard extends StatefulWidget {
   final Location location;
   final VoidCallback onTap;
-  // คงพารามิเตอร์ไว้เพื่อความเข้ากันได้ แต่ไม่ใช้เช็คสิทธิ์
   final String loggedInEmail;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
@@ -31,14 +29,13 @@ class _LocationCardState extends State<LocationCard> {
 
   bool _isOwner = false;
   bool _canEdit = false;
-  bool _isAdmin = false; // 👈 เพิ่ม state สำหรับ Role: Admin
+  bool _isAdmin = false;
   bool _loadingPerm = true;
 
   @override
   void initState() {
     super.initState();
-    // โหลดหลังเฟรมแรก เพื่อให้ context อยู่ใต้ Provider แน่ๆ
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPermissions());
+    WidgetsBinding.instance.addPostFrameCallback((_) => loadPermissions());
   }
 
   @override
@@ -47,25 +44,22 @@ class _LocationCardState extends State<LocationCard> {
     if (oldWidget.location.id != widget.location.id ||
         oldWidget.loggedInEmail.toLowerCase() !=
             widget.loggedInEmail.toLowerCase()) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadPermissions());
+      WidgetsBinding.instance.addPostFrameCallback((_) => loadPermissions());
     }
   }
 
-  Future<void> _loadPermissions() async {
+  Future<void> loadPermissions() async {
     if (!mounted) return;
     setState(() => _loadingPerm = true);
     try {
       final perm = context.read<PermissionProvider>();
       final String locationId = widget.location.id;
 
-      // โหลด member list เพื่อคำนวน owner/canEdit
       await perm.loadMembers(locationId);
 
       final bool isOwner = perm.isOwner(locationId);
       final bool canEdit = perm.canEdit(locationId);
 
-      // 👇 อ่านบทบาทระบบ (isAdmin) จาก AppState
-      // ถ้า AppState ยังไม่ถูก provide จะ catch และคงค่า false
       bool adminRole = false;
       try {
         adminRole = context.read<AppState>().isAdmin;
@@ -77,10 +71,10 @@ class _LocationCardState extends State<LocationCard> {
       setState(() {
         _isOwner = isOwner;
         _canEdit = canEdit;
-        _isAdmin = adminRole; // 👈 เก็บสถานะ Admin
+        _isAdmin = adminRole;
       });
     } catch (e) {
-      debugPrint('PERM error: $e');
+      debugPrint('permission error: $e');
       if (!mounted) return;
       setState(() {
         _isOwner = false;
@@ -94,111 +88,125 @@ class _LocationCardState extends State<LocationCard> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final bool compact = c.maxWidth < 340;
-
-        final double headerHeight = compact ? 112 : 120;
-        final double iconBox = compact ? 48 : 56;
-        final double iconSize = compact ? 22 : 26;
-
-        final double titleFont = compact ? 14 : 16;
-        final double addrFont = compact ? 13 : 14;
-        final double descFont = (compact ? 13 : 14) - 1;
-
-        final EdgeInsets contentPad = EdgeInsets.symmetric(
-          horizontal: compact ? 12 : 16,
-          vertical: compact ? 10 : 12,
-        );
-
-        return MouseRegion(
-          onEnter: (_) => setState(() => isHovered = true),
-          onExit: (_) => setState(() => isHovered = false),
-          child: GestureDetector(
-            onTap: widget.onTap,
-            child: Card(
-              elevation: isHovered ? 8 : 2,
-              shadowColor: Colors.black26,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Stack(
+    return MouseRegion(
+      onEnter: (_) => setState(() => isHovered = true),
+      onExit: (_) => setState(() => isHovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Card(
+          elevation: isHovered ? 8 : 2,
+          shadowColor: Colors.black26,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              // เนื้อหา
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // เนื้อหา
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        height: headerHeight,
-                        color: widget.location.color,
-                        child: Center(
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            width: iconBox,
-                            height: iconBox,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(
-                                alpha: isHovered ? 0.35 : 0.25,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              Icons.apartment,
-                              color: Colors.white,
-                              size: iconSize,
-                            ),
+                  Container(
+                    height: 120,
+                    color: widget.location.color,
+                    child: Center(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(
+                            alpha: isHovered ? 0.35 : 0.25,
                           ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.apartment,
+                          color: Colors.white,
+                          size: 26,
                         ),
                       ),
-                      Expanded(
-                        child: Padding(
-                          padding: contentPad,
-                          child: _AutoScaleInfo(
-                            name: widget.location.name,
-                            address: widget.location.address,
-                            description: widget.location.description,
-                            titleFont: titleFont,
-                            addrFont: addrFont,
-                            descFont: descFont,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-
-                  // ปุ่มมุมขวาบน
-                  if (_isAdmin || (!_loadingPerm && (_canEdit || _isOwner)))
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Edit: Admin หรือคนที่มีสิทธิ์แก้ไข (รวม owner)
-                          if (_isAdmin || _canEdit)
-                            _floatingActionIcon(
-                              tooltip: 'Edit Location',
-                              icon: Icons.edit,
-                              onTap: widget.onEdit,
+                          Text(
+                            widget.location.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
                             ),
-                          if (_isAdmin || _isOwner) const SizedBox(width: 6),
-                          // Delete: Admin หรือ Owner
-                          if (_isAdmin || _isOwner)
-                            _floatingActionIcon(
-                              tooltip: 'Delete Location',
-                              icon: Icons.delete,
-                              onTap: widget.onDelete,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.location.address,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.black,
                             ),
+                          ),
+                          if (widget.location.description != null &&
+                              widget.location.description!
+                                  .trim()
+                                  .isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.location.description!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
+                  ),
                 ],
               ),
-            ),
+
+              // ปุ่มมุมขวาบน
+              if (_isAdmin || (!_loadingPerm && (_canEdit || _isOwner)))
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_isAdmin || _canEdit)
+                        _floatingActionIcon(
+                          tooltip: 'Edit Location',
+                          icon: Icons.edit,
+                          onTap: widget.onEdit,
+                        ),
+                      if (_isAdmin || _isOwner) const SizedBox(width: 6),
+                      if (_isAdmin || _isOwner)
+                        _floatingActionIcon(
+                          tooltip: 'Delete Location',
+                          icon: Icons.delete,
+                          onTap: widget.onDelete,
+                        ),
+                    ],
+                  ),
+                ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -210,7 +218,7 @@ class _LocationCardState extends State<LocationCard> {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: Colors.black.withValues(alpha: 0.35),
+        color: Colors.black.withValues(alpha: .35),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         child: InkWell(
           onTap: onTap,
@@ -221,133 +229,6 @@ class _LocationCardState extends State<LocationCard> {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// ====== _AutoScaleInfo ======
-
-class _AutoScaleInfo extends StatelessWidget {
-  final String name;
-  final String address;
-  final String? description;
-  final double titleFont;
-  final double addrFont;
-  final double descFont;
-
-  const _AutoScaleInfo({
-    required this.name,
-    required this.address,
-    required this.description,
-    required this.titleFont,
-    required this.addrFont,
-    required this.descFont,
-  });
-
-  double _lineH(double font, double factor) => font * factor;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (ctx, inner) {
-        final double budget = inner.maxHeight;
-
-        bool hasDesc = description != null && description!.trim().isNotEmpty;
-        int addrLines = 2;
-
-        const double gapTitle = 4.0;
-        const double gapDesc = 4.0;
-
-        double need(bool withDesc, int addrLs) {
-          final titleH = _lineH(titleFont, 1.20);
-          final addrH = _lineH(addrFont, 1.25) * addrLs;
-          final descH = withDesc ? _lineH(descFont, 1.20) : 0.0;
-          final gaps = gapTitle + (withDesc ? gapDesc : 0.0);
-          return titleH + addrH + descH + gaps;
-        }
-
-        double needed = need(hasDesc, addrLines);
-        if (needed > budget && hasDesc) {
-          hasDesc = false;
-          needed = need(hasDesc, addrLines);
-        }
-        if (needed > budget && addrLines > 1) {
-          addrLines = 1;
-          needed = need(hasDesc, addrLines);
-        }
-        if (needed > budget && addrLines > 0) {
-          addrLines = 0;
-          needed = need(hasDesc, addrLines);
-        }
-
-        final content = Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textHeightBehavior: const TextHeightBehavior(
-                applyHeightToFirstAscent: false,
-                applyHeightToLastDescent: false,
-              ),
-              style: TextStyle(
-                fontSize: titleFont,
-                fontWeight: FontWeight.w700,
-                color: Colors.black87,
-                height: 1.20,
-                leadingDistribution: TextLeadingDistribution.even,
-              ),
-            ),
-            if (addrLines > 0) ...[
-              const SizedBox(height: gapTitle),
-              Text(
-                address,
-                maxLines: addrLines,
-                overflow: TextOverflow.ellipsis,
-                textHeightBehavior: const TextHeightBehavior(
-                  applyHeightToFirstAscent: false,
-                  applyHeightToLastDescent: false,
-                ),
-                style: TextStyle(
-                  fontSize: addrFont,
-                  color: Colors.black,
-                  height: 1.25,
-                  leadingDistribution: TextLeadingDistribution.even,
-                ),
-              ),
-            ],
-            if (hasDesc) ...[
-              const SizedBox(height: gapDesc),
-              Text(
-                description!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textHeightBehavior: const TextHeightBehavior(
-                  applyHeightToFirstAscent: false,
-                  applyHeightToLastDescent: false,
-                ),
-                style: TextStyle(
-                  fontSize: descFont,
-                  color: Colors.grey.shade600,
-                  height: 1.20,
-                  leadingDistribution: TextLeadingDistribution.even,
-                ),
-              ),
-            ],
-          ],
-        );
-
-        return FittedBox(
-          alignment: Alignment.topLeft,
-          fit: BoxFit.scaleDown,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: inner.maxWidth),
-            child: content,
-          ),
-        );
-      },
     );
   }
 }

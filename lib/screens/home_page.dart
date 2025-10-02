@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import '../providers/app_state.dart';
 import '../widgets/location/location_card.dart';
 import '../widgets/location/add_location_dialog.dart';
-import '../widgets/location/responsive_grid.dart';
 import '../widgets/loading.dart';
 import '../widgets/location/add_license_dialog.dart';
 
@@ -27,10 +26,10 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _loadUserLocations();
+    loadUserLocations();
   }
 
-  Future<void> _loadUserLocations() async {
+  Future<void> loadUserLocations() async {
     final appState = Provider.of<AppState>(context, listen: false);
     final email = appState.loggedInEmail;
 
@@ -47,7 +46,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _showAddLocationDialog(BuildContext context) async {
+  Future<void>showAddLocationDialog(BuildContext context) async {
     // 1) เปิด dialog แรกด้วย root navigator เสมอ
     final result = await showDialog<Map<String, dynamic>?>(
       context: context,
@@ -74,14 +73,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _showEditDialog(Location location) {
+  void showEditDialog(Location location) {
     showDialog(
       context: context,
       builder: (_) => AddLocationDialog(initialLocation: location),
     );
   }
 
-  void _confirmDelete(Location location) async {
+  void confirmDelete(Location location) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -149,10 +148,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void showFailMessage(
-    String errorMessage,
-    dynamic error,
-  ) {
+  void showFailMessage(String errorMessage, dynamic error) {
     final nav = Navigator.of(context, rootNavigator: true);
     final overlay = nav.overlay;
     if (overlay == null) return;
@@ -340,25 +336,30 @@ class _HomePageState extends State<HomePage> {
                         ),
                       );
                     }
-
-                    return LocationGridView(
-                      locations: filtered,
-                      onLocationTap: (location) {
-                        appState.selectLocation(location);
-                        appState.setLocationId(location.id);
-                        appState.setView(AppView.managemodels);
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(12),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 400, 
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            mainAxisExtent: 250,
+                          ),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final location = filtered[index];
+                        return LocationCard(
+                          location: location,
+                          loggedInEmail: appState.loggedInEmail,
+                          onTap: () {
+                            appState.selectLocation(location);
+                            appState.setLocationId(location.id);
+                            appState.setView(AppView.overview);
+                          },
+                          onEdit: () => showEditDialog(location),
+                          onDelete: () => confirmDelete(location),
+                        );
                       },
-                      cardBuilder: (location, onTap) => LocationCard(
-                        location: location,
-                        loggedInEmail: appState.loggedInEmail,
-                        onTap: () {
-                          appState.selectLocation(location);
-                          appState.setLocationId(location.id);
-                          appState.setView(AppView.managemodels);
-                        },
-                        onEdit: () => _showEditDialog(location),
-                        onDelete: () => _confirmDelete(location),
-                      ),
                     );
                   },
                 ),
@@ -384,7 +385,7 @@ class _HomePageState extends State<HomePage> {
             onTapDown: (_) => setState(() => isPressed = true),
             onTapUp: (_) {
               setState(() => isPressed = false);
-              _showAddLocationDialog(context);
+              showAddLocationDialog(context);
             },
             onTapCancel: () => setState(() => isPressed = false),
             child: AnimatedScale(
@@ -392,7 +393,7 @@ class _HomePageState extends State<HomePage> {
               scale: isPressed ? 0.95 : (isHovered ? 1.05 : 1.0),
               curve: Curves.easeInOut,
               child: FloatingActionButton(
-                onPressed: () => _showAddLocationDialog(context),
+                onPressed: () => showAddLocationDialog(context),
                 backgroundColor: isHovered
                     ? const Color(0xFF0A46C9)
                     : const Color(0xFF2563EB),

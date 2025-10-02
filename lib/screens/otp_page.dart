@@ -1,3 +1,4 @@
+// import
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,6 +17,7 @@ class OTPPage extends StatefulWidget {
 }
 
 class _OTPPageState extends State<OTPPage> {
+  // ===== ตัวแปร =====
   final List<TextEditingController> controllers = List.generate(
     4,
     (_) => TextEditingController(),
@@ -23,18 +25,22 @@ class _OTPPageState extends State<OTPPage> {
   final List<FocusNode> focusNodes = List.generate(4, (_) => FocusNode());
   final List<bool> hasEdited = List.filled(4, false);
 
-  late int _secondsRemaining;
-  Timer? _timer;
-  bool _isOtpExpired = false;
-  bool _isOtpIncorrect = false;
+  late int secondsRemaining;
+  Timer? timer;
+  bool isOtpExpired = false;
+  bool isOtpIncorrect = false;
   String OTP = '';
   String email = '';
   bool isLoading = false;
+  int resendCooldown = 0;
+  Timer? resendTimer;
 
+  // ===== ฟังก์ชัน =====
   @override
   void initState() {
     super.initState();
-    _startCountdown();
+    startCountdown();
+    startResendCooldown(); // เริ่มมาก็กันกดสแปม 30 วิแรก
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       focusNodes[0].requestFocus();
@@ -52,7 +58,8 @@ class _OTPPageState extends State<OTPPage> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    timer?.cancel();
+    resendTimer?.cancel(); 
     for (var controller in controllers) {
       controller.dispose();
     }
@@ -62,34 +69,42 @@ class _OTPPageState extends State<OTPPage> {
     super.dispose();
   }
 
-  void _startCountdown() {
-    _secondsRemaining = 180;
-    _isOtpExpired = false;
-    _timer?.cancel();
+  void startCountdown() {
+    secondsRemaining = 180;
+    isOtpExpired = false;
+    timer?.cancel();
 
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_secondsRemaining > 0) {
-        setState(() {
-          _secondsRemaining--;
-        });
+    timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (secondsRemaining > 0) {
+        setState(() => secondsRemaining--);
       } else {
         timer.cancel();
-        setState(() {
-          _isOtpExpired = true;
-        });
+        setState(() => isOtpExpired = true);
       }
     });
   }
 
-  void _onChanged(String value, int index) {
+  // เริ่มคูลดาวน์ 30 วิ สำหรับปุ่ม Reset
+  void startResendCooldown() {
+    resendTimer?.cancel();
+    setState(() => resendCooldown = 30);
+
+    resendTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (resendCooldown > 0) {
+        setState(() => resendCooldown--);
+      } else {
+        t.cancel();
+      }
+    });
+  }
+
+  void onChanged(String value, int index) {
     if (value.isEmpty) {
       controllers[index].clear();
       FocusScope.of(context).requestFocus(focusNodes[index]);
       hasEdited[index] = false;
       return;
     }
-
-    // ถ้า paste หลายตัว เช่น "1234"
     if (value.length > 1) {
       for (int i = 0; i < value.length && i < controllers.length; i++) {
         controllers[i].text = value[i];
@@ -98,15 +113,11 @@ class _OTPPageState extends State<OTPPage> {
       FocusScope.of(context).unfocus();
       return;
     }
-
-    // แทนที่ค่าทันทีที่พิมพ์
     controllers[index]
       ..text = value
       ..selection = TextSelection.collapsed(offset: value.length);
-
     hasEdited[index] = true;
 
-    // ไปช่องถัดไปถ้ามี
     if (index < focusNodes.length - 1) {
       FocusScope.of(context).requestFocus(focusNodes[index + 1]);
     } else {
@@ -114,26 +125,24 @@ class _OTPPageState extends State<OTPPage> {
     }
   }
 
-  // ✅ ทำให้รีเซ็ต OTP ใช้งานได้จริง
+  // กดขอ OTP ใหม่
   void resetOtp() async {
+    // กันเผลากดซ้ำระหว่างคูลดาวน์ (ปกติ onPressed จะถูก disable อยู่แล้ว)
+    if (resendCooldown > 0) return;
+
     setState(() => isLoading = true);
     try {
-      // ล้างช่องกรอกทั้งหมด + เคลียร์สถานะผิด
       for (var c in controllers) {
         c.clear();
       }
-      setState(() {
-        _isOtpIncorrect = false;
-      });
+      setState(() => isOtpIncorrect = false);
 
-      // เรียกหลังบ้านให้ส่ง OTP ใหม่ไปยังอีเมลเดิม
       final ok = await ApiService.sendOtp(widget.email);
-
       if (!mounted) return;
 
       if (ok) {
-        // รีสตาร์ทตัวนับเวลา + โฟกัสช่องแรก
-        _startCountdown();
+        startCountdown(); // เริ่มนับ 3 นาทีใหม่
+        startResendCooldown(); // เริ่มคูลดาวน์ 30 วิใหม่
         FocusScope.of(context).requestFocus(focusNodes[0]);
       } else {
         showFailMessage(
@@ -142,33 +151,24 @@ class _OTPPageState extends State<OTPPage> {
         );
       }
     } catch (e) {
-      if (mounted) {
-        showFailMessage('Error', 'An unexpected error occurred');
-      }
+      if (mounted) showFailMessage('Error', 'An unexpected error occurred');
     } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  void _onVerifyPressed() async {
+  void onVerifyPressed() async {
     setState(() => isLoading = true);
-
     try {
       String enteredOtp = controllers.map((c) => c.text).join();
-
-      if (_isOtpExpired || enteredOtp.length != 4) {
+      if (isOtpExpired || enteredOtp.length != 4) {
         setState(() {
-          _isOtpIncorrect = true;
+          isOtpIncorrect = true;
           isLoading = false;
         });
         return;
       }
-
-      // ✅ เรียก backend
       final success = await ApiService.verifyOtp(widget.email, enteredOtp);
-
       if (success && mounted) {
         Navigator.pushReplacement(
           context,
@@ -177,24 +177,17 @@ class _OTPPageState extends State<OTPPage> {
           ),
         );
       } else {
-        setState(() {
-          _isOtpIncorrect = true;
-        });
+        setState(() => isOtpIncorrect = true);
         showFailMessage('OTP Failed', 'Invalid or expired OTP.');
       }
     } catch (e) {
       showFailMessage('Error', 'Verification failed');
     } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  void showFailMessage(
-    String errorMessage,
-    dynamic error,
-  ) {
+  void showFailMessage(String errorMessage, dynamic error) {
     final nav = Navigator.of(context, rootNavigator: true);
     final overlay = nav.overlay;
     if (overlay == null) return;
@@ -206,7 +199,7 @@ class _OTPPageState extends State<OTPPage> {
         right: 16,
         child: Material(
           color: Colors.transparent,
-          elevation: 50, // สูงกว่า dialog
+          elevation: 20,
           child: FailSnackbar(
             title: errorMessage,
             message: error,
@@ -217,13 +210,13 @@ class _OTPPageState extends State<OTPPage> {
         ),
       ),
     );
-
     overlay.insert(entry);
     Future.delayed(const Duration(seconds: 3)).then((_) {
       if (entry.mounted) entry.remove();
     });
   }
 
+  // ===== Widget หลัก =====
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -276,21 +269,24 @@ class _OTPPageState extends State<OTPPage> {
                     ),
                   ),
                   const SizedBox(height: 20),
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(4, _buildOtpBox),
+                    children: List.generate(4, buildOtpBox),
                   ),
                   const SizedBox(height: 10),
+
                   Text(
-                    'OTP will expire in: ${_secondsRemaining ~/ 60}:${(_secondsRemaining % 60).toString().padLeft(2, '0')} minutes',
+                    'OTP will expire in: ${secondsRemaining ~/ 60}:${(secondsRemaining % 60).toString().padLeft(2, '0')} minutes',
                     style: const TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                   const SizedBox(height: 20),
+
                   Center(
                     child: FractionallySizedBox(
                       widthFactor: 0.5,
                       child: ElevatedButton(
-                        onPressed: _isOtpExpired ? null : _onVerifyPressed,
+                        onPressed: isOtpExpired ? null : onVerifyPressed,
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size.fromHeight(40),
                           backgroundColor: const Color(0xFF0B87EA),
@@ -305,39 +301,35 @@ class _OTPPageState extends State<OTPPage> {
                     child: FractionallySizedBox(
                       widthFactor: 0.5,
                       child: OutlinedButton(
-                        onPressed: resetOtp,
+                        onPressed: (resendCooldown > 0) ? null : resetOtp,
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(40),
                           side: const BorderSide(color: Color(0xFF0B87EA)),
                           foregroundColor: const Color(0xFF0B87EA),
                         ),
-                        child: const Text('Reset code'),
+                        child: Text(
+                          (resendCooldown > 0)
+                              ? 'Reset code (${resendCooldown}s)'
+                              : 'Reset code',
+                        ),
                       ),
                     ),
                   ),
-                  Column(
+
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              color: Colors.black,
-                            ),
-                            onPressed: () {
-                              Navigator.pop(context);
-                            },
-                          ),
-                          InkWell(
-                            onTap: () => Navigator.pop(context),
-                            child: const Text(
-                              'Back to Sign in',
-                              style: TextStyle(color: Colors.black),
-                            ),
-                          ),
-                        ],
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.black),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      InkWell(
+                        onTap: () => Navigator.pop(context),
+                        child: const Text(
+                          'Back to Sign in',
+                          style: TextStyle(color: Colors.black),
+                        ),
                       ),
                     ],
                   ),
@@ -351,8 +343,8 @@ class _OTPPageState extends State<OTPPage> {
     );
   }
 
-  // box otp
-  Widget _buildOtpBox(int index) {
+  // ===== Widget ย่อย: ช่อง OTP =====
+  Widget buildOtpBox(int index) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       child: SizedBox(
@@ -369,22 +361,22 @@ class _OTPPageState extends State<OTPPage> {
             counterText: '',
             border: OutlineInputBorder(
               borderSide: BorderSide(
-                color: _isOtpIncorrect ? Colors.red : Colors.grey,
+                color: isOtpIncorrect ? Colors.red : Colors.grey,
               ),
             ),
             enabledBorder: OutlineInputBorder(
               borderSide: BorderSide(
-                color: _isOtpIncorrect ? Colors.red : Colors.grey,
+                color: isOtpIncorrect ? Colors.red : Colors.grey,
               ),
             ),
             focusedBorder: OutlineInputBorder(
               borderSide: BorderSide(
-                color: _isOtpIncorrect ? Colors.red : Colors.blue,
+                color: isOtpIncorrect ? Colors.red : Colors.blue,
                 width: 2.0,
               ),
             ),
           ),
-          onChanged: (value) => _onChanged(value, index),
+          onChanged: (value) => onChanged(value, index),
         ),
       ),
     );

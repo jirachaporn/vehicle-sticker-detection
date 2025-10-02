@@ -388,7 +388,7 @@ def send_otp():
                 # Fallback
                 supabase.rpc('invalidate_previous_otp', {'user_email': email}).execute()
                 return supabase.table("password_reset_log").insert({
-                    "email": email,
+                    "reset_email": email,
                     "otp": otp,
                     "used": False,
                     "success": None
