@@ -6,6 +6,7 @@ import '../providers/api_service.dart';
 import 'otp_page.dart';
 import '../widgets/snackbar/fail_snackbar.dart';
 import '../widgets/loading.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -26,15 +27,68 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
     super.initState();
   }
 
+  // void _submit() async {
+  //   final email = email_controller.text.trim();
+
+  //   setState(() {
+  //     isLoading = true;
+  //     find_email = true;
+  //   });
+
+  //   try {
+  //     final success = await ApiService.sendOtp(email);
+
+  //     setState(() => isLoading = false);
+
+  //     if (success && mounted) {
+  //       Navigator.push(
+  //         context,
+  //         PageRouteBuilder(
+  //           transitionDuration: const Duration(milliseconds: 100),
+  //           pageBuilder: (_, __, ___) => OTPPage(email: email),
+  //           transitionsBuilder: (_, animation, __, child) =>
+  //               FadeTransition(opacity: animation, child: child),
+  //         ),
+  //       );
+  //     } else {
+  //       showFailMessage(
+  //         'OTP Failed',
+  //         'Email not found or OTP not sent.',
+  //       );
+  //     }
+  //   } catch (e) {
+  //     setState(() => isLoading = false);
+  //     showFailMessage('Error', 'Unexpected error occurred.');
+  //   }
+  // }
+
   void _submit() async {
     final email = email_controller.text.trim();
 
     setState(() {
       isLoading = true;
-      find_email = true;
+      find_email = true; // ยังใช้ตัวแปรเดิมของคุณได้
     });
 
     try {
+      final supabase = Supabase.instance.client;
+
+      // ✅ เรียก RPC แทนการ select ตรง
+      final exists = await supabase.rpc<bool>(
+        'check_user_exists',
+        params: {'p_email': email.toLowerCase()},
+      );
+
+      if ((exists) == false) {
+        setState(() {
+          isLoading = false;
+          find_email = false;
+        });
+        showFailMessage('Not found', 'Email not registered.');
+        return;
+      }
+
+      // มีอีเมลแล้ว → ส่ง OTP
       final success = await ApiService.sendOtp(email);
 
       setState(() => isLoading = false);
@@ -50,10 +104,7 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
           ),
         );
       } else {
-        showFailMessage(
-          'OTP Failed',
-          'Email not found or OTP not sent.',
-        );
+        showFailMessage('OTP Failed', 'Could not send OTP. Please try again.');
       }
     } catch (e) {
       setState(() => isLoading = false);
@@ -61,10 +112,7 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
     }
   }
 
-  void showFailMessage(
-    String errorMessage,
-    dynamic error,
-  ) {
+  void showFailMessage(String errorMessage, dynamic error) {
     final nav = Navigator.of(context, rootNavigator: true);
     final overlay = nav.overlay;
     if (overlay == null) return;
