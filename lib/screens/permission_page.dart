@@ -86,10 +86,10 @@ class _PermissionPageState extends State<PermissionPage>
 
     try {
       // 1) เพิ่ม/อัปเดตสมาชิกเป็นสถานะ invited
-      final permType = PermissionTypeX.fromDb(invitePerm); 
+      final permType = PermissionTypeX.fromDb(invitePerm);
       await provider.upsertMember(
         locationId: widget.locationId,
-        email: email, 
+        email: email,
         name: name.isEmpty ? null : name,
         permission: permType,
         status: MemberStatus.invited,
@@ -145,10 +145,7 @@ class _PermissionPageState extends State<PermissionPage>
   }
 
   Future<void> handleExpireSweep() async {
-    toast(
-      context,
-      'Expired invitation sweep is not supported in this version',
-    );
+    toast(context, 'Expired invitation sweep is not supported in this version');
   }
 
   // ----- helpers -----
@@ -207,6 +204,9 @@ class _PermissionPageState extends State<PermissionPage>
           indicatorColor: const Color(0xFF2563EB),
           labelColor: const Color(0xFF2563EB),
           unselectedLabelColor: Colors.black54,
+          overlayColor: WidgetStateProperty.all(
+            const Color(0xFF2563EB).withValues(alpha:  0.1),
+          ),
           tabs: const [
             Tab(text: 'Members'),
             Tab(text: 'Invite'),
