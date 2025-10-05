@@ -86,48 +86,50 @@ class _DataTablePageState extends State<DataTablePage> {
   // build หลัก
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(30),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Row(
-                children: const [
-                  Text(
-                    'Vehicle Table Data',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+    return Padding(
+      padding: const EdgeInsets.all(30),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
+              children: const [
+                Text(
+                  'Vehicle Table Data',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
-                  Spacer(),
-                  SizedBox(width: 56, height: 56),
+                ),
+                Spacer(),
+                SizedBox(width: 56, height: 56),
+              ],
+            ),
+            const SizedBox(height: 16),
+            buildFilters(),
+            const SizedBox(height: 16),
+            Container(
+              height: 520,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              buildFilters(),
-              const SizedBox(height: 16),
-              Container(
-                height: 520,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 8,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: loading
-                    ? const Center(child: CircularProgressIndicator())
-                    : (errorText != null)
-                    ? Center(child: Text('Load failed\n$errorText'))
-                    : buildTable(),
-              ),
-            ],
-          ),
+              child: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : (errorText != null)
+                  ? Center(child: Text('Load failed\n$errorText'))
+                  : buildTable(),
+            ),
+          ],
         ),
       ),
     );
@@ -149,7 +151,7 @@ class _DataTablePageState extends State<DataTablePage> {
         children: [
           // Search Field
           Expanded(
-            flex: 3,
+            flex: 8,
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
@@ -165,7 +167,7 @@ class _DataTablePageState extends State<DataTablePage> {
                 ),
                 focusedBorder: const OutlineInputBorder(
                   borderRadius: BorderRadius.all(Radius.circular(12)),
-                  borderSide: BorderSide(color: Colors.blue, width: 2),
+                  borderSide: BorderSide(color: Color(0xFF2563EB), width: 2),
                 ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -178,47 +180,60 @@ class _DataTablePageState extends State<DataTablePage> {
           const SizedBox(width: 16),
           // Status Filter Dropdown (All | OK | Exited | Alert)
           Expanded(
-            flex: 1,
-            child: Container(
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade400),
+            flex: 2,
+            child: DropdownButtonFormField<String>(
+              value: selectedStatus,
+              isExpanded: true, // 👈 กันข้อความล้น
+              dropdownColor: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              icon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: Colors.black54,
               ),
-              child: DropdownButtonFormField<String>(
-                value: selectedStatus,
-                decoration: const InputDecoration(
-                  labelText: 'Status Filter',
-                  
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
+              iconSize: 24,
+              style: const TextStyle(fontSize: 14, color: Colors.black87),
+              decoration: InputDecoration(
+                labelText: 'Status Filter',
+                labelStyle: const TextStyle(
+                  // 👈 label เป็นสีดำ
+                  fontSize: 14,
+                  color: Colors.black,
+                  fontWeight: FontWeight.w500,
                 ),
-                borderRadius: BorderRadius.circular(12),
-                icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                items: const ['All', 'OK', 'Exited', 'Alert']
-                    .map(
-                      (String status) => DropdownMenuItem<String>(
-                        value: status,
-                        child: Text(
-                          status,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (String? newValue) {
-                  if (newValue != null) {
-                    setState(() => selectedStatus = newValue);
-                  }
-                },
-                validator: (value) => null,
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF2563EB),
+                    width: 2,
+                  ),
+                ),
               ),
+              items: const ['All', 'OK', 'Exited', 'Alert']
+                  .map(
+                    (s) => DropdownMenuItem<String>(
+                      value: s,
+                      child: Text(
+                        s,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => selectedStatus = v);
+              },
+              validator: (_) => null,
             ),
           ),
         ],
@@ -376,9 +391,9 @@ class _DataTablePageState extends State<DataTablePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha:0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha:0.35)),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Text(
         label,
