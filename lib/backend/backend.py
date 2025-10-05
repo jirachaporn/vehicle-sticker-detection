@@ -615,45 +615,62 @@ def get_locations():
     if not user_email:
         return jsonify({"error": "User email is required (query param 'user')"}), 400
 
+    def _exec_with_retry(builder):
+        try:
+            return builder.execute()
+        except Exception as e:
+            msg = str(e)
+            # เฉพาะเคสเน็ต/ซ็อกเก็ตสะดุด ลองอีกครั้งแบบสั้น ๆ
+            if "WinError 10035" in msg or "timed out" in msg or "Connection" in msg:
+                time.sleep(0.25)
+                return builder.execute()
+            raise
+
     try:
-        # เช็ค admin ก่อน
+        # ── admin: ดึงทั้งหมด ─────────────────────────────
         if _is_admin(user_email):
             print(f"🔑 Admin detected: {user_email}, returning ALL locations")
-            loc_res = supabase.table("locations") \
-                .select("location_id, location_name, location_address, location_description, location_color, created_at, location_license") \
-                .order("created_at", desc=True) \
-                .execute()
-            locations = loc_res.data or []
-        else:
-            print(f"🔍 Fetching locations (via location_members) for: {user_email}")
-            mem_res = supabase.table("location_members") \
-                .select("location_id") \
-                .eq("member_email", user_email) \
-                .eq("member_status", "confirmed") \
-                .execute()
-            memberships = mem_res.data or []
-            loc_ids = [m.get("location_id") for m in memberships if m.get("location_id")]
-            if not loc_ids:
-                return jsonify([]), 200
-            loc_res = supabase.table("locations") \
-                .select("location_id, location_name, location_address, location_description, location_color, created_at, location_license") \
-                .in_("location_id", loc_ids) \
-                .order("created_at", desc=True) \
-                .execute()
+            loc_res = _exec_with_retry(
+                supabase.table("locations")
+                .select("location_id, location_name, location_address, location_description, location_color, created_at, location_license")
+                .order("created_at", desc=True)
+            )
             locations = loc_res.data or []
 
-        # สร้าง response (คง key เดิม 'locations_id' ถ้า frontend ใช้อยู่)
-        result = []
-        for loc in locations:
-            result.append({
-                "locations_id": loc.get("location_id"),
-                "name": loc.get("location_name"),
-                "address": loc.get("location_address"),
-                "description": loc.get("location_description"),
-                "color": loc.get("location_color"),
-                "created_at": loc.get("created_at"),
-                "location_license": loc.get("location_license"),
-            })
+        # ── user ปกติ: ดึงจาก location_members -> locations ──
+        else:
+            print(f"🔍 Fetching locations (via location_members) for: {user_email}")
+            mem_res = _exec_with_retry(
+                supabase.table("location_members")
+                .select("location_id")
+                .eq("member_email", user_email)
+                .eq("member_status", "confirmed")
+            )
+            memberships = mem_res.data or []
+            loc_ids = [m.get("location_id") for m in memberships if m.get("location_id")]
+
+            if not loc_ids:
+                print(f"✅ Found 0 locations for {user_email} (no memberships)")
+                return jsonify([]), 200
+
+            loc_res = _exec_with_retry(
+                supabase.table("locations")
+                .select("location_id, location_name, location_address, location_description, location_color, created_at, location_license")
+                .in_("location_id", loc_ids)
+                .order("created_at", desc=True)
+            )
+            locations = loc_res.data or []
+
+        # ── build response (คง key เดิม 'locations_id') ───────
+        result = [{
+            "locations_id": loc.get("location_id"),
+            "name": loc.get("location_name"),
+            "address": loc.get("location_address"),
+            "description": loc.get("location_description"),
+            "color": loc.get("location_color"),
+            "created_at": loc.get("created_at"),
+            "location_license": loc.get("location_license"),
+        } for loc in locations]
 
         print(f"✅ Found {len(result)} locations for {user_email}")
         return jsonify(result), 200

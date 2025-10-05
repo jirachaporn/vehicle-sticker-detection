@@ -46,7 +46,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void>showAddLocationDialog(BuildContext context) async {
+  Future<void> showAddLocationDialog(BuildContext context) async {
     // 1) เปิด dialog แรกด้วย root navigator เสมอ
     final result = await showDialog<Map<String, dynamic>?>(
       context: context,
@@ -232,74 +232,102 @@ class _HomePageState extends State<HomePage> {
                   top: 8,
                 ),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     // Search Box
                     Expanded(
+                      flex: 9,
                       child: TextField(
                         decoration: InputDecoration(
-                          hintText: 'Search locations...',
+                          labelText: 'Search locations',
                           prefixIcon: const Icon(Icons.search, size: 20),
                           filled: true,
                           fillColor: Colors.white,
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade400),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: const OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                            borderSide: BorderSide(
+                              color: Color(0xFF2563EB),
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        onChanged: (v) => setState(() => _searchQuery = v),
+                      ),
+                    ),
+
+                    const SizedBox(width: 8),
+
+                    // Sort Dropdown
+                    Expanded(
+                      flex: 1,
+                      child: DropdownButtonFormField<bool>(
+                        value: _sortDescending,
+                        isExpanded: true,
+                        dropdownColor: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: Colors.black54,
+                        ),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black87,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Sort by',
+                          // ให้หัวข้อเป็นสีดำเหมือนตัวอย่าง
+                          labelStyle: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
                               color: Colors.grey.shade400,
                               width: 1,
                             ),
                           ),
+                          enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(
+                                        color: Colors.grey.shade300,
+                                        width: 1,
+                                      ),
+                                    ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
                               color: Color(0xFF2563EB),
-                              width: 1,
+                              width: 2,
                             ),
                           ),
                         ),
-                        onChanged: (value) =>
-                            setState(() => _searchQuery = value),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Sort Dropdown
-                    SizedBox(
-                      height: 40,
-                      child: Container(
-                        padding: const EdgeInsets.only(left: 12, right: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey.shade400),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<bool>(
-                            isDense: true,
-                            value: _sortDescending,
-                            icon: const Icon(Icons.arrow_drop_down, size: 20),
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Colors.black87,
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: true,
-                                child: Text('Newest'),
-                              ),
-                              DropdownMenuItem(
-                                value: false,
-                                child: Text('Oldest'),
-                              ),
-                            ],
-                            onChanged: (value) =>
-                                setState(() => _sortDescending = value!),
-                          ),
-                        ),
+                        items: const [
+                          DropdownMenuItem(value: true, child: Text('Newest')),
+                          DropdownMenuItem(value: false, child: Text('Oldest')),
+                        ],
+                        onChanged: (v) => setState(() => _sortDescending = v!),
+                        validator: (_) => null,
                       ),
                     ),
                   ],
@@ -340,7 +368,7 @@ class _HomePageState extends State<HomePage> {
                       padding: const EdgeInsets.all(12),
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 400, 
+                            maxCrossAxisExtent: 400,
                             crossAxisSpacing: 12,
                             mainAxisSpacing: 12,
                             mainAxisExtent: 250,
