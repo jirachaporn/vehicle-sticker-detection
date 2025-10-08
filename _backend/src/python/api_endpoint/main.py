@@ -1,18 +1,37 @@
 # main.py - FastAPI application for Automated Vehicle Tagging System
-from fastapi import FastAPI
+import os
+from fastapi import FastAPI, HTTPException
 from .routes_overview import router as overview_router
 from .detection import router as detection_router
 
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+
+docs_url = None if APP_ENV == "production" else "/docs"
+redoc_url = None if APP_ENV == "production" else "/redoc"
+
 app = FastAPI(title="Automated Vehicle Tagging System API")
 
-app.include_router(overview_router)
+app.include_router(overview_router, prefix="/overview", tags=["overview"])
+app.include_router(detection_router, tags=["detection"])
+
 
 @app.get("/")
 def root():
-    return {"message": "Automated Vehicle Tagging System API is running!!!"}
+    missing = []
+    for key in ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE", "CLOUDINARY_URL", "API_KEY_MAIN"]:
+        if not os.getenv(key):
+            missing.append(key)
+
+    if missing and APP_ENV == "production":
+        raise HTTPException(status_code=500, detail=f"Missing required env: {', '.join(missing)}")
+
+    return {
+        "message": "Automated Vehicle Tagging System API is running!!!",
+        "env": APP_ENV,
+        "missing_env_for_dev": missing if missing else None
+    }
 
 
 
 
-
-# uvicorn src.python.api_endpoint.main:app --reload --port 8000
+# uvicorn src.python.api_endpoint.main:app --reload --host 0.0.0.0 --port 8000

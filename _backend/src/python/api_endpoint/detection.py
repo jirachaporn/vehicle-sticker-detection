@@ -1,45 +1,57 @@
-# detection.py - API endpoint for image upload, OCR processing, and database insertion
-from fastapi import APIRouter
-from fastapi import FastAPI, File, UploadFile, HTTPException 
-from ..utils.processor import run_ocr_and_insert
-from ..utils.cloudinary_uploader import CloudinaryUploader 
+# api_endpoint/detection.py
+from fastapi import APIRouter, File, UploadFile, HTTPException, Form
+from typing import Literal
+from ..utils.cloudinary_uploader import CloudinaryUploader
+from ..utils.sticker_detector import get_sticker_detector
+from ..api_service.ai4thai_ocr_LP_api import recognize_license_plate
+from ..utils.processor import insert_detection_payload
 
 router = APIRouter()
 
-# สร้าง instance ของ Uploader ไว้ใช้งาน
-# การตั้งค่า Cloudinary จะถูกทำแค่ครั้งเดียวตอนเริ่มแอป
-cloudinary_uploader = CloudinaryUploader()
-
 @router.post("/detect")
-async def detect(file: UploadFile = File(...)):
+async def detect(
+    file: UploadFile = File(...),
+    location_id: str = Form(...),
+    model_id: str = Form(...),
+    direction: Literal["in", "out"] = Form("in"),
+):
+    try:
+        # 1) อ่านไฟล์เป็น bytes 
+        image_bytes = await file.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Empty file.")
 
-    file_bytes = await file.read()
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="No file uploaded.")
-    
-    cloudinary_url = cloudinary_uploader.upload_image(file_bytes, file.filename)
-    if not cloudinary_url:
-        raise HTTPException(status_code=500, detail="Upload to Cloudinary failed.")
+        # 2) อัป Cloudinary → ได้ URL
+        uploader = CloudinaryUploader()
+        image_url = uploader.upload_bytes(image_bytes, folder="detection")
+        if not image_url:
+            raise HTTPException(status_code=500, detail="Upload to Cloudinary failed (no secure_url).")
 
-    supabase_response, error = run_ocr_and_insert(cloudinary_url)
-    if error:
-        raise HTTPException(status_code=500, detail=error)
+        # 3) ตรวจสติกเกอร์ 
+        detector = get_sticker_detector()
+        sticker = detector.detect_from_bytes(image_bytes)
+        is_sticker = bool(sticker.get("is_sticker", False))
 
-    return {
-        "cloudinary_url": cloudinary_url,
-        "supabase_response": supabase_response.data
-    }
+        # 4) OCR 
+        ocr = recognize_license_plate(image_url) or {}
 
+        # 5) สร้าง payload 
+        payload = {
+            "location_id": location_id,
+            "model_id": model_id,
+            "image_path": [image_url],
+            "detected_plate": ocr,
+            "direction": direction.lower(),
+            "is_sticker": is_sticker
+        }
+        # บันทึกลง DB
+        res = insert_detection_payload(payload)
+        if hasattr(res, "error") and res.error:
+            raise HTTPException(status_code=500, detail=f"DB insert error: {res.error}")
 
+        return payload
 
-
-
-
-
-
-
-
-
-# D:\Work VS Code\Automated DT Sticker\src> uvicorn python.api_endpoint.app:app --reload
-
-
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {e}")

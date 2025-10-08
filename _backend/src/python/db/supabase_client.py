@@ -1,4 +1,4 @@
-# supabase_client.py - Manage connections to Supabase
+# db/supabase_client.py - Manage connections to Supabase
 import os
 import logging
 from supabase import create_client, Client
@@ -19,7 +19,7 @@ class SupabaseManager:
             
             url = os.getenv("SUPABASE_URL")
             key = os.getenv("SUPABASE_SERVICE_ROLE")
-
+            
             if not url or not key:
                 logging.error("❌ Supabase URL or Key is missing from .env file.")
                 raise ValueError("Supabase URL or Key not found in environment variables.")
@@ -30,7 +30,6 @@ class SupabaseManager:
             except Exception as e:
                 logging.error(f"❌ Failed to connect to Supabase: {e}")
                 raise
-
         return cls._client
 
 def get_supabase_client() -> Client:

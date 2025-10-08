@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 router = APIRouter()
 
-@router.get("/overview/{location_id}")
+@router.get("/{location_id}")
 def get_overview(location_id: str):
     try:
         sb = get_supabase_client()

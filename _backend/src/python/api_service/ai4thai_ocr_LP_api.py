@@ -1,4 +1,4 @@
-# ai4thai_ocr_LP_api.py - OCR License Plate Recognition API service from ai for thai
+# api_service/ai4thai_ocr_LP_api.py - OCR License Plate Recognition API service from ai for thai
 import requests
 import logging
 import json
@@ -51,7 +51,6 @@ def recognize_license_plate(image_url: str) -> Optional[Dict[str, Any]]:
         logger.error(f"Request failed: {e}")
     except json.JSONDecodeError:
         logger.error("Failed to decode JSON response.")
-    
     return None
 
 # ตัวอย่างผลลัพธ์
