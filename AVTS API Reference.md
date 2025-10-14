@@ -51,7 +51,7 @@ Path Parameters & Query Parameters
 - ### How to call `GET /notifications`
 #### `GET http://localhost:8000/notifications?location_id=44950349-bd33-49a6-a90a-3159537d2361&status=all&limit=20&offset=0`
 
-## 4) Unread Counts (by Severity)
+## 4) Unread Counts (by Severity) เลขที่ไอคอนกระดิ่ง
 Path Parameters
 | Name          | Type   | Required | Description    |
 | ------------- | ------ | -------- | -------------- |
