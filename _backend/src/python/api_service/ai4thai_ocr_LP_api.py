@@ -53,6 +53,26 @@ def recognize_license_plate(image_url: str) -> Optional[Dict[str, Any]]:
         logger.error("Failed to decode JSON response.")
     return None
 
+def recognize_license_plate_from_bytes(image_bytes: bytes) -> Optional[Dict[str, Any]]:
+    if not API_KEY_MAIN or not URL:
+        logger.error("API_KEY_MAIN or URL is missing in .env.")
+        return None
+    headers = {'apikey': API_KEY_MAIN}
+    try:
+        files = [('file', ('image.jpg', image_bytes, 'image/jpeg'))]
+        response = requests.post(URL, headers=headers, files=files)
+        if response.status_code != 200:
+            logger.error(f"HTTP {response.status_code}: {response.text}")
+            return None
+        json_response = response.json()
+        return {k: json_response[k] for k in FILTER_KEYS if k in json_response}
+    except requests.RequestException as e:
+        logger.error(f"Request failed: {e}")
+    except json.JSONDecodeError:
+        logger.error("Failed to decode JSON response.")
+    return None
+
+
 # ตัวอย่างผลลัพธ์
 # {
 #     "conf": 93.73386383,

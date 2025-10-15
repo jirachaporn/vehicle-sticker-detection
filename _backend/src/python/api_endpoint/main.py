@@ -3,17 +3,19 @@ import os
 from fastapi import FastAPI, HTTPException
 from .routes_overview import router as overview_router
 from .detection import router as detection_router
+from .routes_notifications import router as notifications_router
+from .routes_table import router as table_router
 
 APP_ENV = os.getenv("APP_ENV", "development").lower()
-
 docs_url = None if APP_ENV == "production" else "/docs"
 redoc_url = None if APP_ENV == "production" else "/redoc"
 
 app = FastAPI(title="Automated Vehicle Tagging System API")
 
-app.include_router(overview_router, prefix="/overview", tags=["overview"])
+app.include_router(overview_router, tags=["overview"])
 app.include_router(detection_router, tags=["detection"])
-
+app.include_router(notifications_router, tags=["notifications"])
+app.include_router(table_router, prefix="/table", tags=["table"])
 
 @app.get("/")
 def root():
@@ -30,8 +32,5 @@ def root():
         "env": APP_ENV,
         "missing_env_for_dev": missing if missing else None
     }
-
-
-
 
 # uvicorn src.python.api_endpoint.main:app --reload --host 0.0.0.0 --port 8000

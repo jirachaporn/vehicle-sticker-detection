@@ -1,71 +1,134 @@
-# routes_overview.py - API endpoint for overview statistics
+# api_endpoint/routes_overview.py - API endpoint for overview statistics (refactor)
 from fastapi import APIRouter
-from ..db.supabase_client import get_supabase_client 
-from datetime import date, timedelta
+from ..db.supabase_client import get_supabase_client
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 router = APIRouter()
 
-@router.get("/{location_id}")
+TZ = ZoneInfo("Asia/Bangkok")
+HOURS_BUCKETS = [0, 3, 6, 9, 12, 15, 18, 21]
+
+def _parse_ts_to_local(ts: str) -> datetime | None:
+    if not ts:
+        return None
+    s = ts.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+        return dt.astimezone(TZ)
+    except Exception:
+        return None
+
+@router.get("/overview/{location_id}")
 def get_overview(location_id: str):
     try:
         sb = get_supabase_client()
-        detections = sb.table("detections").select("*").eq("location_id", location_id).execute().data
+        res = sb.table("detections") \
+            .select("detected_at,is_sticker,direction") \
+            .eq("location_id", location_id) \
+            .execute()
+        rows = res.data or []
 
-        total = len(detections)
-        authorized = len([d for d in detections if d.get("is_sticker")])
-        unauthorized = total - authorized
+        now = datetime.now(TZ)
+        today = now.date()
+        seven_days_ago = today - timedelta(days=6)
+        twenty_four_hours_ago = now - timedelta(hours=24)
 
-        today = str(date.today())
-        today_records = [d for d in detections if d["detected_at"][:10] == today]
-        in_count = len([d for d in today_records if d.get("direction") == "in"])
-        out_count = len([d for d in today_records if d.get("direction") == "out"])
+        alerts_q = (
+            sb.table("notifications")
+            .select("notifications_id", count="exact")   
+            .eq("location_id", location_id)
+            .eq("notification_status", "new")            
+            .gte("created_at", twenty_four_hours_ago.isoformat()))
 
-        # daily (7 วันย้อนหลัง)
-        daily_data = []
-        for i in range(6, -1, -1):
-            day = date.today() - timedelta(days=i)
-            count = len([d for d in detections if d["detected_at"][:10] == str(day)])
-            daily_data.append({"day": day.strftime("%a"), "count": count})
+        alerts_res = alerts_q.execute()
+        alerts = alerts_res.count or (len(alerts_res.data or []))
 
-        # weekly (4 สัปดาห์ย้อนหลัง)
-        weekly_data = []
+        daily_keys = [today - timedelta(days=i) for i in range(6, -1, -1)]
+        daily_map = {d: 0 for d in daily_keys}
+
+        week_ranges = []
         for i in range(4, 0, -1):
-            start = date.today() - timedelta(weeks=i)
-            end = start + timedelta(weeks=1)
-            count = len([
-                d for d in detections
-                if start <= date.fromisoformat(d["detected_at"][:10]) < end
-            ])
-            weekly_data.append({"week": f"Week {5-i}", "count": count})
+            start = (today - timedelta(weeks=i))
+            end = start + timedelta(days=7)
+            week_ranges.append((start, end))
+        weekly_counts = [0, 0, 0, 0]
 
-        # monthly (6 เดือนย้อนหลัง)
-        monthly_data = []
+        monthly_labels = []
+        monthly_map = {}
         for i in range(6, 0, -1):
-            month = (date.today().replace(day=1) - timedelta(days=30*i))
-            m = month.strftime("%b")
-            count = len([d for d in detections if d["detected_at"][:7] == month.strftime("%Y-%m")])
-            monthly_data.append({"month": m, "count": count})
+            approx_month = (today.replace(day=1) - timedelta(days=30*i))
+            label = approx_month.strftime("%b")
+            ym_key = approx_month.strftime("%Y-%m")
+            monthly_labels.append((label, ym_key))
+            monthly_map[ym_key] = 0
 
-        # recent activity (24h → mock เป็นทุก 3 ชม.)
-        recent_data = []
-        hours = [0, 3, 6, 9, 12, 15, 18, 21]
-        for h in hours:
-            count = len([d for d in detections if d["detected_at"][11:13] == f"{h:02d}"])
-            recent_data.append({"time": f"{h:02d}:00", "count": count})
+        recent_map = {f"{h:02d}:00": 0 for h in HOURS_BUCKETS}
 
-        accuracy = round((authorized / total) * 100, 2) if total > 0 else 0
+        total = len(rows)
+        authorized = 0
+        in_count = 0
+        out_count = 0
+
+        for r in rows:
+            dt_local = _parse_ts_to_local(r.get("detected_at"))
+            if dt_local is None:
+                continue
+
+            d_local = dt_local.date()
+            h_local = dt_local.hour
+            is_sticker = bool(r.get("is_sticker", False))
+
+            if is_sticker:
+                authorized += 1
+
+            direction = (r.get("direction") or "").lower()
+            if d_local == today:
+                if direction == "in":
+                    in_count += 1
+                elif direction == "out":
+                    out_count += 1
+
+            if seven_days_ago <= d_local <= today:
+                if d_local in daily_map:
+                    daily_map[d_local] += 1
+
+            for idx, (ws, we) in enumerate(week_ranges):
+                if ws <= d_local < we:
+                    weekly_counts[idx] += 1
+                    break
+
+            ym = d_local.strftime("%Y-%m")
+            if ym in monthly_map:
+                monthly_map[ym] += 1
+
+            if dt_local >= twenty_four_hours_ago:
+                bucket_hour = (h_local // 3) * 3
+                key = f"{bucket_hour:02d}:00"
+                if key in recent_map:
+                    recent_map[key] += 1
+
+        unauthorized = total - authorized
+        accuracy = round((authorized / total) * 100, 2) if total > 0 else 0.0
+
+        dailyData = [{"day": d.strftime("%a"), "count": daily_map[d]} for d in daily_keys]
+        weeklyData = [{"week": f"Week {i+1}", "count": weekly_counts[i]} for i in range(4)]
+        monthlyData = [{"month": lbl, "count": monthly_map[ym]} for (lbl, ym) in monthly_labels]
+        recentActivity = [{"time": k, "count": recent_map[k]} for k in [f"{h:02d}:00" for h in HOURS_BUCKETS]]
 
         return {
             "totalVehicles": total,
             "authorizedVehicles": authorized,
             "unauthorizedVehicles": unauthorized,
-            "alerts": 0,
+            "alerts": alerts,
             "todayInOut": {"in": in_count, "out": out_count},
-            "dailyData": daily_data,
-            "weeklyData": weekly_data,
-            "monthlyData": monthly_data,
-            "recentActivity": recent_data,
-            "detectionAccuracy": accuracy,
+            "dailyData": dailyData,
+            "weeklyData": weeklyData,
+            "monthlyData": monthlyData,
+            "recentActivity": recentActivity,
+            "detectionAccuracy": accuracy 
         }
 
     except Exception as e:

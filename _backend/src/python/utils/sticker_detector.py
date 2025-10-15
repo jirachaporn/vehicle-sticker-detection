@@ -23,7 +23,8 @@ class StickerDetector:
         if img is None:
             return {"is_sticker": False, 
                     "count": 0, 
-                    "confident": 0.0}
+                    "confident": 0.0 
+                }
 
         results = self.model.predict(img, verbose=False, conf=self.conf, iou=self.iou)
 
