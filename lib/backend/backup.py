@@ -388,7 +388,7 @@ def send_otp():
                 # Fallback
                 supabase.rpc('invalidate_previous_otp', {'user_email': email}).execute()
                 return supabase.table("password_reset_log").insert({
-                    "email": email,
+                    "reset_email": email,
                     "otp": otp,
                     "used": False,
                     "success": None
@@ -589,47 +589,88 @@ def reset_password():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
+
+# -------------------- Role helpers --------------------
+def _get_user_role(email: str):
+    """คืนค่า role (str) หรือ None ถ้าไม่พบ"""
+    if not email:
+        return None
+    try:
+        r = supabase.table("users").select("user_role").eq("user_email", email).limit(1).execute()
+        if r.data and len(r.data) > 0:
+            return (r.data[0].get("user_role") or "").lower()
+    except Exception as e:
+        print(f"⚠️ _get_user_role_by_email error for {email}: {e}")
+    return None
+
+def _is_admin(email: str) -> bool:
+    role = _get_user_role(email)
+    return role == "admin"
+
+
+
 @app.route("/locations", methods=["GET"])
 def get_locations():
     user_email = request.args.get("user")
     if not user_email:
-        return jsonify({"error": "User email is required"}), 400
+        return jsonify({"error": "User email is required (query param 'user')"}), 400
+
+    def _exec_with_retry(builder):
+        try:
+            return builder.execute()
+        except Exception as e:
+            msg = str(e)
+            # เฉพาะเคสเน็ต/ซ็อกเก็ตสะดุด ลองอีกครั้งแบบสั้น ๆ
+            if "WinError 10035" in msg or "timed out" in msg or "Connection" in msg:
+                time.sleep(0.25)
+                return builder.execute()
+            raise
 
     try:
-        print(f"🔍 Fetching locations (via location_members) for: {user_email}")
+        # ── admin: ดึงทั้งหมด ─────────────────────────────
+        if _is_admin(user_email):
+            print(f"🔑 Admin detected: {user_email}, returning ALL locations")
+            loc_res = _exec_with_retry(
+                supabase.table("locations")
+                .select("location_id, location_name, location_address, location_description, location_color, created_at, location_license")
+                .order("created_at", desc=True)
+            )
+            locations = loc_res.data or []
 
-        # 1) หา location_id ที่ user เป็นสมาชิกและยืนยันแล้ว
-        mem_res = supabase.table("location_members") \
-            .select("location_id") \
-            .eq("member_email", user_email) \
-            .eq("member_status", "confirmed") \
-            .execute()
+        # ── user ปกติ: ดึงจาก location_members -> locations ──
+        else:
+            print(f"🔍 Fetching locations (via location_members) for: {user_email}")
+            mem_res = _exec_with_retry(
+                supabase.table("location_members")
+                .select("location_id")
+                .eq("member_email", user_email)
+                .eq("member_status", "confirmed")
+            )
+            memberships = mem_res.data or []
+            loc_ids = [m.get("location_id") for m in memberships if m.get("location_id")]
 
-        memberships = mem_res.data or []
-        loc_ids = [m.get("location_id") for m in memberships if m.get("location_id")]
-        if not loc_ids:
-            return jsonify([]), 200
+            if not loc_ids:
+                print(f"✅ Found 0 locations for {user_email} (no memberships)")
+                return jsonify([]), 200
 
-        # 2) ดึงรายละเอียดสถานที่ตาม loc_ids (ใช้ชื่อคอลัมน์ตามสคีมาใหม่)
-        loc_res = supabase.table("locations") \
-            .select("location_id, location_name, location_address, location_description, location_color, created_at") \
-            .in_("location_id", loc_ids) \
-            .order("created_at", desc=True) \
-            .execute()
+            loc_res = _exec_with_retry(
+                supabase.table("locations")
+                .select("location_id, location_name, location_address, location_description, location_color, created_at, location_license")
+                .in_("location_id", loc_ids)
+                .order("created_at", desc=True)
+            )
+            locations = loc_res.data or []
 
-        locations = loc_res.data or []
-
-        # 3) สร้าง response (คง key เดิม 'locations_id' ถ้า frontend ใช้อยู่)
-        result = []
-        for loc in locations:
-            result.append({
-                "locations_id": loc.get("location_id"),                # alias ให้เหมือนของเดิม
-                "name": loc.get("location_name"),
-                "address": loc.get("location_address"),
-                "description": loc.get("location_description"),
-                "color": loc.get("location_color"),
-                "created_at": loc.get("created_at"),
-            })
+        # ── build response (คง key เดิม 'locations_id') ───────
+        result = [{
+            "locations_id": loc.get("location_id"),
+            "name": loc.get("location_name"),
+            "address": loc.get("location_address"),
+            "description": loc.get("location_description"),
+            "color": loc.get("location_color"),
+            "created_at": loc.get("created_at"),
+            "location_license": loc.get("location_license"),
+        } for loc in locations]
 
         print(f"✅ Found {len(result)} locations for {user_email}")
         return jsonify(result), 200
@@ -640,108 +681,129 @@ def get_locations():
 
 
 
+
+# ===== locations: CREATE =====
 @app.route("/save_locations", methods=["POST"])
 def save_locations():
-    """
-    POST body:
-    {
-        "name": "Location Name",
-        "address": "Address",
-        "description": "Description",
-        "color": "#FF0000",
-        "owner_email": "user@example.com",
-        "shared_with": [{"email": "user2@example.com"}]
-    }
-    """
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Request body is required"}), 400
+        data = request.get_json() or {}
 
+        # name และ owner_email ยังจำเป็น เพราะต้องสร้าง owner membership
         for field in ["name", "owner_email"]:
-            if not data.get(field):
+            if not (data.get(field) or "").strip():
                 return jsonify({"error": f"{field} is required"}), 400
 
-        print(f"💾 Saving location: {data['name']} for {data['owner_email']}")
+        owner_email = (data["owner_email"] or "").strip().lower()
+        owner_name = owner_email.split("@", 1)[0].strip() or None
 
-        # ✅ Clean JSON fields
-        shared_with = data.get("shared_with", [])
-        if not isinstance(shared_with, list):
-            shared_with = []
+        now_ts = datetime.now(tz).isoformat()
+        print(f"💾 Saving location: {data['name']} for {owner_email}")
 
+        #  map ให้ตรง DB ใหม่
         location_data = {
-            "location_name": data.get("name"),
-            "address": data.get("address", ""),
-            "description": data.get("description", ""),
-            "color": data.get("color", "#000000"),
-            "owner_email": data.get("owner_email"),
-            "shared_with": shared_with,
-            "created_at": created_at,
+            "location_name": (data.get("name") or "").strip(),
+            "location_address": (data.get("address") or "").strip(),
+            "location_description": (data.get("description") or "").strip(),
+            "location_color": (data.get("color") or "#1565C0").strip(), 
+            "created_at": now_ts,
         }
 
+        # 1) insert สถานที่
         def insert_location():
             return supabase.table("locations").insert(location_data).execute()
 
         insert_future = executor.submit(insert_location)
         result = insert_future.result(timeout=5)
 
-        if result.data and len(result.data) > 0:
-            new_id = result.data[0]["locations_id"] 
-            print(f"✅ Location saved successfully with ID: {new_id}")
-
-            return jsonify({
-                "message": "Location created successfully",
-                "id": new_id,
-                "location": result.data[0]
-            }), 201
-        else:
+        if not result.data:
             return jsonify({"error": "Failed to create location"}), 500
+
+        #  คีย์หลักใหม่ในตารางคือ location_id
+        new_id = result.data[0]["location_id"]
+        print(f"✅ Location saved with ID: {new_id}")
+
+        # 2) สร้างสิทธิ์ owner ใน location_members ให้ผู้สร้าง
+        owner_row = {
+            "location_id": new_id,
+            "member_email": owner_email,
+            "member_name": owner_name,      
+            "member_permission": "owner",
+            "member_status": "confirmed",
+        }
+
+        try:
+            supabase.table("location_members").insert(owner_row).execute()
+        except Exception as e:
+            try:
+                supabase.table("locations").delete().eq("location_id", new_id).execute()
+            except Exception as _:
+                pass
+            print(f"❌ create owner membership failed: {e}")
+            return jsonify({"error": "Failed to create owner membership"}), 500
+
+        return jsonify({
+            "message": "Location created successfully",
+            "id": new_id,
+            "location": result.data[0],
+        }), 201
 
     except Exception as e:
         print(f"🔥 ERROR during /save_locations: {e}")
         return jsonify({"error": str(e)}), 500
-    
-    
+
+
+
+# ===== locations: UPDATE =====
 @app.route('/update_location/<location_id>', methods=['PUT'])
 def update_location(location_id):
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
 
         update_data = {
-            "location_name": data.get("name"), 
-            "address": data.get("address"),
-            "description": data.get("description"),
-            "color": data.get("color"),
-            "shared_with": data.get("shared_with", [])
+            "location_name": data.get("name"),
+            "location_address": data.get("address"),
+            "location_description": data.get("description"),
+            "location_color": data.get("color"),
         }
 
-        response = supabase.table("locations") \
-            .update(update_data) \
-            .eq("locations_id", location_id) \
-            .execute()
+        # ลบ key ที่เป็น None ออก (กันเขียนทับด้วย null)
+        update_data = {k: v for k, v in update_data.items() if v is not None}
 
-        if response.data:
+        resp = (supabase.table("locations")
+                .update(update_data)
+                .eq("location_id", location_id)
+                .execute())
+
+        if resp.data:
             return jsonify({"message": "Location updated successfully"}), 200
-        else:
-            return jsonify({"message": "Location not found"}), 404
+        return jsonify({"message": "Location not found"}), 404
 
     except Exception as e:
         return jsonify({"message": str(e)}), 500
-    
-    
-    
+
+
+# ===== locations: DELETE =====
 @app.route('/delete_location/<location_id>', methods=['DELETE'])
 def delete_location(location_id):
     try:
-        res = supabase.table("locations") \
-            .delete() \
-            .eq("locations_id", location_id) \
-            .execute()
+        # ถ้า FK ไม่มี ON DELETE CASCADE ให้เคลียร์ตารางลูกก่อน
+        try:
+            supabase.table("location_members").delete().eq("location_id", location_id).execute()
+            supabase.table("model").delete().eq("location_id", location_id).execute()
+            supabase.table("detections").delete().eq("location_id", location_id).execute()
+        except Exception as _:
+            # ถ้าใช้ cascade อยู่แล้ว ส่วนนี้จะล้มเหลวก็ข้ามได้
+            pass
+
+        res = (supabase.table("locations")
+               .delete()
+               .eq("location_id", location_id)
+               .execute())
 
         if res.data:
             return jsonify({"message": "Location deleted"}), 200
-        else:
-            return jsonify({"error": "Location not found"}), 404
+        return jsonify({"error": "Location not found"}), 404
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

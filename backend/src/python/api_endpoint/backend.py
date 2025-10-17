@@ -15,6 +15,7 @@ import pytz, cv2, requests, torch, httpx
 import numpy as np
 import time
 
+
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
@@ -27,7 +28,8 @@ created_at = datetime.now(tz).isoformat()
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
-    api_secret=os.getenv("CLOUDINARY_API_SECRET"))
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+)
 
 # Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -35,14 +37,17 @@ SUPABASE_SERVICE_ROLE = os.getenv("SUPABASE_SERVICE_ROLE")
 supabase = create_client(
     SUPABASE_URL,
     SUPABASE_SERVICE_ROLE,
-    options=ClientOptions(headers={"Authorization": f"Bearer {SUPABASE_SERVICE_ROLE}"}))
+    options=ClientOptions(
+        headers={"Authorization": f"Bearer {SUPABASE_SERVICE_ROLE}"}
+    )
+)
 
 EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 # Roboflow
-# ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY") or ""
-# ROBOFLOW_BASE_URL = (os.getenv("ROBOFLOW_API_URL") or "https://detect.roboflow.com").rstrip("/")
+ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY") or ""
+ROBOFLOW_BASE_URL = (os.getenv("ROBOFLOW_API_URL") or "https://detect.roboflow.com").rstrip("/")
 
 # 🚀 Global thread pool executor สำหรับ async operations
 executor = ThreadPoolExecutor(max_workers=3)
@@ -356,6 +361,8 @@ def send_permission_email_endpoint():
         return jsonify({"ok": False, "error": "send email failed"}), 500
     return jsonify({"ok": True}), 200
 
+
+
 @app.route("/send-otp", methods=["POST"])
 def send_otp():
     try:
@@ -579,6 +586,8 @@ def reset_password():
         print("🔥 EXCEPTION during reset-password:", repr(e))
         return jsonify({"success": False, "message": str(e)}), 500
 
+
+
 # -------------------- Role helpers --------------------
 def _get_user_role(email: str):
     """คืนค่า role (str) หรือ None ถ้าไม่พบ"""
@@ -595,6 +604,8 @@ def _get_user_role(email: str):
 def _is_admin(email: str) -> bool:
     role = _get_user_role(email)
     return role == "admin"
+
+
 
 @app.route("/locations", methods=["GET"])
 def get_locations():
@@ -667,6 +678,8 @@ def get_locations():
         return jsonify({"error": str(e)}), 500
 
 
+
+
 # ===== locations: CREATE =====
 @app.route("/save_locations", methods=["POST"])
 def save_locations():
@@ -736,6 +749,8 @@ def save_locations():
         print(f"🔥 ERROR during /save_locations: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+
 # ===== locations: UPDATE =====
 @app.route('/update_location/<location_id>', methods=['PUT'])
 def update_location(location_id):
@@ -764,6 +779,7 @@ def update_location(location_id):
     except Exception as e:
         return jsonify({"message": str(e)}), 500
 
+
 # ===== locations: DELETE =====
 @app.route('/delete_location/<location_id>', methods=['DELETE'])
 def delete_location(location_id):
@@ -788,7 +804,10 @@ def delete_location(location_id):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
- 
+
+
+    
+    
 @app.route("/upload-sticker-model", methods=["POST"])
 def upload_sticker_model():
     try:
@@ -841,6 +860,7 @@ def upload_sticker_model():
         print("🔥 ERROR during /upload-sticker-model:", e)
         return jsonify({"error": str(e)}), 500
 
+
 def _try_open_camera_on_index(index: int):
     """ลองเปิดกล้องด้วย backend หลายแบบบน Windows ตาม index ที่ระบุ"""
     backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, None]
@@ -866,6 +886,7 @@ def _try_open_camera_on_index(index: int):
             print(f"⚠️ open camera index={index} with backend {be} failed: {e}")
     return None, None
 
+
 def _probe_cameras(max_index: int = 8) -> list[int]:
     """สแกนหา index 0..max_index ที่เปิดได้จริง"""
     found = []
@@ -876,6 +897,7 @@ def _probe_cameras(max_index: int = 8) -> list[int]:
             cap.release()
     return found
 
+
 @app.get("/list-cameras")
 def list_cameras():
     """คืนลิสต์ index ของกล้องที่เปิดได้ (ดีฟอลต์ตัด index 0 ออกเพื่อหลีกเลี่ยงกล้องโน้ตบุ๊ก)"""
@@ -883,6 +905,8 @@ def list_cameras():
     found = _probe_cameras(8)
     cams = [i for i in found if (not usb_only or i != 0)] or found
     return _corsify(jsonify({"available": cams}))
+
+
 
 @app.route("/start-camera", methods=["POST", "OPTIONS"])
 def start_camera():
@@ -1013,6 +1037,8 @@ def start_camera():
         "location_id": current_location_id,
         "generation": latest_gen
     })), 200
+
+
 
 # ------------------------- STOP CAMERA ----------------------------------------
 @app.route("/stop-camera", methods=["POST", "OPTIONS"])
@@ -1150,6 +1176,8 @@ def detection_worker():
             print("infer worker error:", e)
             time.sleep(0.2)
 
+
+
 @app.route("/frame_raw", methods=["GET", "OPTIONS"])
 def frame_raw():
     """
@@ -1216,6 +1244,12 @@ def cleanup_connections(error):
             except:
                 pass
 
+from flask import Flask, redirect
+@app.route("/")
+def index():
+    # ดูเอกสารของฝั่ง FastAPI
+    return redirect("/api/docs", code=302)
+
 if __name__ == "__main__":
     print(app.url_map)
-    app.run(debug=True, threaded=True) 
+    app.run(debug=True) 

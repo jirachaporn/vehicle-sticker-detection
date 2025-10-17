@@ -1,26 +1,36 @@
 # main.py - FastAPI application for Automated Vehicle Tagging System
 import os
+from fastapi import FastAPI
 from fastapi import FastAPI, HTTPException
 from .routes_overview import router as overview_router
 from .detection import router as detection_router
 from .routes_notifications import router as notifications_router
 from .routes_table import router as table_router
 
-APP_ENV = os.getenv("APP_ENV", "development").lower()
+# add more
+from fastapi.middleware.cors import CORSMiddleware
+
+
+APP_ENV = os.getenv("APP_ENV", "Development for Programer").lower()
 docs_url = None if APP_ENV == "production" else "/docs"
 redoc_url = None if APP_ENV == "production" else "/redoc"
 
 app = FastAPI(title="Automated Vehicle Tagging System API")
 
+# Routers
 app.include_router(overview_router, tags=["overview"])
 app.include_router(detection_router, tags=["detection"])
 app.include_router(notifications_router, tags=["notifications"])
 app.include_router(table_router, prefix="/table", tags=["table"])
 
+
 @app.get("/")
 def root():
     missing = []
-    for key in ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE", "CLOUDINARY_URL", "API_KEY_MAIN"]:
+    for key in ["API_KEY_MAIN_AI4THAI_OCR", 
+                "SUPABASE_URL", "SUPABASE_SERVICE_ROLE", "SUPABASE_ANON_KEY","SUPABASE_FUNCTION_URL",
+                "CLOUDINARY_URL","CLOUDINARY_NAME","CLOUDINARY_API_KEY","CLOUDINARY_API_SECRET",
+                "EMAIL_ADDRESS","EMAIL_PASSWORD"]:
         if not os.getenv(key):
             missing.append(key)
 
@@ -28,9 +38,9 @@ def root():
         raise HTTPException(status_code=500, detail=f"Missing required env: {', '.join(missing)}")
 
     return {
-        "message": "Automated Vehicle Tagging System API is running!!!",
+        "message": "Automated Vehicle Tagging System API is running!",
         "env": APP_ENV,
         "missing_env_for_dev": missing if missing else None
     }
 
-# uvicorn src.python.api_endpoint.main:app --reload --host 0.0.0.0 --port 8000
+# uvicorn backend.src.python.api_endpoint.main:app --reload --host 0.0.0.0 --port 8000

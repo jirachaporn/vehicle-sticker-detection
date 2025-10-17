@@ -49,7 +49,6 @@ def get_yolo_model_for_location(location_id: str) -> YOLO:
         return model
 
 def detect_sticker_from_bytes(image_bytes: bytes, model: YOLO, conf: float = None, iou: float = None):
-
     import numpy as np, cv2
     if conf is None:
         conf = float(os.getenv("STICKER_CONF", "0.30"))

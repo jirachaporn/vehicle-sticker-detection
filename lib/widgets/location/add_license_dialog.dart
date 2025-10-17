@@ -288,6 +288,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
     } catch (e) {
       if (!mounted) return;
       showFailMessage(context, 'Save failed', 'Could not add license_plate');
+      debugPrint(e.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -471,12 +472,14 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
-                              foregroundColor: const WidgetStatePropertyAll(Colors.red,),
-                              side: const WidgetStatePropertyAll( BorderSide(color: Colors.red),),
+                              foregroundColor: const WidgetStatePropertyAll(
+                                Colors.red,
+                              ),
+                              side: const WidgetStatePropertyAll(
+                                BorderSide(color: Colors.red),
+                              ),
                             ),
-                            child: const Text(
-                              'Cancel',
-                            ), 
+                            child: const Text('Cancel'),
                           ),
                         ),
 
