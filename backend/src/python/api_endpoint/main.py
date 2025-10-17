@@ -1,15 +1,18 @@
 # main.py - FastAPI application for Automated Vehicle Tagging System
 import os
-from fastapi import FastAPI
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
 from .routes_overview import router as overview_router
 from .detection import router as detection_router
 from .routes_notifications import router as notifications_router
 from .routes_table import router as table_router
 
-# add more
-from fastapi.middleware.cors import CORSMiddleware
-
+from .email_permission import router as permission_router
+from .routes_location import router as locations_router
+from .reset_password import router as reset_password_router
+from .router_model import router as model_router
+from .router_camera import router as camera_router
 
 APP_ENV = os.getenv("APP_ENV", "Development for Programer").lower()
 docs_url = None if APP_ENV == "production" else "/docs"
@@ -22,7 +25,11 @@ app.include_router(overview_router, tags=["overview"])
 app.include_router(detection_router, tags=["detection"])
 app.include_router(notifications_router, tags=["notifications"])
 app.include_router(table_router, prefix="/table", tags=["table"])
-
+app.include_router(permission_router, prefix="/permission", tags=["permission"])
+app.include_router(locations_router, tags=["locations"])
+app.include_router(reset_password_router, prefix="/password", tags=["password"])
+app.include_router(model_router, prefix="/model", tags=["model"])
+app.include_router(camera_router, prefix="/camera", tags=["camera"])
 
 @app.get("/")
 def root():
