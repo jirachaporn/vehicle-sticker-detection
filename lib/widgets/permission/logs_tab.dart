@@ -106,7 +106,7 @@ class LogsTab extends StatelessWidget {
             // Content Section
             Expanded(
               child: Container(
-                color: Colors.white,
+                color: Colors.grey.shade100,
                 child: ListView.separated(
                   padding: const EdgeInsets.all(24),
                   itemCount: sorted.length,

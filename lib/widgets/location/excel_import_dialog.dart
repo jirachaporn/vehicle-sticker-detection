@@ -108,7 +108,6 @@ void showFailMessage(
         showSuccessMessage('Saved example to: ${outFile.path}');
       }
     } catch (e) {
-      // ❌ แจ้งเตือนล้มเหลว
       if (context.mounted) {
         showFailMessage("Download failed", e.toString());
       }

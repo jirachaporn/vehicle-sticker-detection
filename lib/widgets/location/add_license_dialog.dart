@@ -102,7 +102,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
   final supa = Supabase.instance.client;
   final uuid = const Uuid();
 
-  final List<_PlateRowData> _rows = <_PlateRowData>[_PlateRowData()];
+  List<_PlateRowData> _rows = <_PlateRowData>[_PlateRowData()];
   final List<String> _deletedIds = <String>[];
 
   bool _loading = false;
@@ -139,15 +139,19 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
 
       final data = await supa
           .from('license_plate')
-          .select('license_id, license_text, license_local, car_owner, note')
+          .select(
+            'license_id, license_text, license_local, car_owner, note, on_license',
+          )
           .eq('location_license', key)
-          .order('license_text', ascending: true);
+          .order('on_license', ascending: true); // เรียงตาม on_license
 
       final list = (data as List).cast<Map<String, dynamic>>();
       _rows
         ..clear()
         ..addAll(
-          list.isEmpty ? [_PlateRowData()] : list.map(_PlateRowData.fromMap),
+          list.isEmpty
+              ? [_PlateRowData()]
+              : list.map((m) => _PlateRowData.fromMap(m)),
         );
     } catch (e) {
       if (!mounted) return;
@@ -250,6 +254,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                 'license_local': r.licenseLocal.text.trim(),
                 'car_owner': r.carOwner.text.trim(),
                 'note': r.note.text.trim().isEmpty ? null : r.note.text.trim(),
+                'on_license': r.onLicense,
               },
             )
             .toList();
@@ -267,6 +272,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                 'license_local': r.licenseLocal.text.trim(),
                 'car_owner': r.carOwner.text.trim(),
                 'note': r.note.text.trim().isEmpty ? null : r.note.text.trim(),
+                'on_license': r.onLicense,
               },
             )
             .toList();
@@ -294,7 +300,15 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
     }
   }
 
-  void _addRow() => setState(() => _rows.add(_PlateRowData()));
+  void _addRow() {
+    setState(() {
+      final nextOnLicense = _rows.isEmpty
+          ? 1
+          : _rows.map((r) => r.onLicense).reduce((a, b) => a > b ? a : b) + 1;
+
+      _rows.add(_PlateRowData(onLicense: nextOnLicense));
+    });
+  }
 
   void _removeRow(int index) {
     if (_rows.length == 1) {
@@ -303,6 +317,12 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
     }
     final removed = _rows.removeAt(index);
     if (removed.licenseId != null) _deletedIds.add(removed.licenseId!);
+
+    // ปรับเลข onLicense ใหม่เรียงต่อเนื่อง
+    for (int i = 0; i < _rows.length; i++) {
+      _rows[i].onLicense = i + 1;
+    }
+
     setState(() {});
   }
 
@@ -373,24 +393,54 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                                 result.isNotEmpty &&
                                 mounted) {
                               setState(() {
-                                _rows.addAll(
-                                  result.map(
-                                    (m) => _PlateRowData(
-                                      licenseText: TextEditingController(
-                                        text: m['license_text'] ?? '',
-                                      ),
-                                      licenseLocal: TextEditingController(
-                                        text: m['license_local'] ?? '',
-                                      ),
-                                      carOwner: TextEditingController(
-                                        text: m['car_owner'] ?? '',
-                                      ),
-                                      note: TextEditingController(
-                                        text: m['note'] ?? '',
+                                if (_rows.isEmpty ||
+                                    _rows.every(
+                                      (r) =>
+                                          r.licenseText.text.isEmpty &&
+                                          r.licenseLocal.text.isEmpty &&
+                                          r.carOwner.text.isEmpty &&
+                                          r.note.text.isEmpty,
+                                    )) {
+                                  // ถ้าไม่มีข้อมูล หรือทุกช่องว่าง ให้แทนที่ด้วย result ใหม่เลย
+                                  _rows = result
+                                      .map(
+                                        (m) => _PlateRowData(
+                                          licenseText: TextEditingController(
+                                            text: m['license_text'] ?? '',
+                                          ),
+                                          licenseLocal: TextEditingController(
+                                            text: m['license_local'] ?? '',
+                                          ),
+                                          carOwner: TextEditingController(
+                                            text: m['car_owner'] ?? '',
+                                          ),
+                                          note: TextEditingController(
+                                            text: m['note'] ?? '',
+                                          ),
+                                        ),
+                                      )
+                                      .toList();
+                                } else {
+                                  // ถ้ามีข้อมูลแล้ว ให้เพิ่มต่อท้ายตามปกติ
+                                  _rows.addAll(
+                                    result.map(
+                                      (m) => _PlateRowData(
+                                        licenseText: TextEditingController(
+                                          text: m['license_text'] ?? '',
+                                        ),
+                                        licenseLocal: TextEditingController(
+                                          text: m['license_local'] ?? '',
+                                        ),
+                                        carOwner: TextEditingController(
+                                          text: m['car_owner'] ?? '',
+                                        ),
+                                        note: TextEditingController(
+                                          text: m['note'] ?? '',
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
+                                  );
+                                }
                               });
                             }
                           },
@@ -431,9 +481,10 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                       child: SingleChildScrollView(
                         child: Column(
                           children: List.generate(_rows.length, (i) {
+                            final row = _rows[i];
                             return _PlateNumberRow(
-                              displayIndex: i + 1,
-                              data: _rows[i],
+                              displayIndex: row.onLicense,
+                              data: row,
                               onRemove: () => _removeRow(i),
                               onChanged: () => setState(() {}),
                             );
@@ -522,6 +573,7 @@ class _PlateRowData {
   final TextEditingController licenseLocal;
   final TextEditingController carOwner;
   final TextEditingController note;
+  int onLicense; // <-- เพิ่มตรงนี้
 
   _PlateRowData({
     this.licenseId,
@@ -529,6 +581,7 @@ class _PlateRowData {
     TextEditingController? licenseLocal,
     TextEditingController? carOwner,
     TextEditingController? note,
+    this.onLicense = 1, // default 1
   }) : licenseText = licenseText ?? TextEditingController(),
        licenseLocal = licenseLocal ?? TextEditingController(),
        carOwner = carOwner ?? TextEditingController(),
@@ -542,14 +595,11 @@ class _PlateRowData {
   factory _PlateRowData.fromMap(Map<String, dynamic> m) {
     return _PlateRowData(
       licenseId: m['license_id'] as String?,
-      licenseText: TextEditingController(
-        text: (m['license_text'] as String?) ?? '',
-      ),
-      licenseLocal: TextEditingController(
-        text: (m['license_local'] as String?) ?? '',
-      ),
-      carOwner: TextEditingController(text: (m['car_owner'] as String?) ?? ''),
-      note: TextEditingController(text: (m['note'] as String?) ?? ''),
+      licenseText: TextEditingController(text: m['license_text'] ?? ''),
+      licenseLocal: TextEditingController(text: m['license_local'] ?? ''),
+      carOwner: TextEditingController(text: m['car_owner'] ?? ''),
+      note: TextEditingController(text: m['note'] ?? ''),
+      onLicense: (m['on_license'] as int?) ?? 1, // ดึงจาก DB
     );
   }
 

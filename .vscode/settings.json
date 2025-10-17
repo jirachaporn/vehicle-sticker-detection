@@ -83,16 +83,16 @@
     "http",
     "net"
   ],
-    "cSpell.words": [
-        "Cmpp",
-        "dotenv",
-        "imgs",
-        "ipynb",
-        "roboto",
-        "ITTI",
-        "pycache",
-        "TESOPRE",
-        "venv",
-        "/[\\u0E00-\\u0E7F]/g"
-    ]
+  "cSpell.words": [
+    "Cmpp",
+    "dotenv",
+    "imgs",
+    "ipynb",
+    "roboto",
+    "ITTI",
+    "pycache",
+    "TESOPRE",
+    "venv",
+    "/[\\u0E00-\\u0E7F]/g"
+  ]
 }

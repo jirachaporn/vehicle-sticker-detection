@@ -28,7 +28,7 @@ class InviteTab extends StatelessWidget {
     context.watch<PermissionProvider>();
 
     return Container(
-      color: Colors.white,
+      color: Colors.grey.shade100,
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Center(
