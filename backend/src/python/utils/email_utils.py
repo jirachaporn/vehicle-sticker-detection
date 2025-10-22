@@ -210,3 +210,103 @@ def send_permission_link_email(
         except:
             pass
         return False
+    
+    
+def _build_signup_otp_email_html(otp: str) -> str:
+    """สร้าง HTML ของ OTP สำหรับ Sign Up (ข้อความแบบ signup แต่ใช้สไตล์จาก link email)"""
+    box_style = (
+        "display:inline-block;width:44px;height:56px;line-height:56px;"
+        "margin:0 6px;border-radius:12px;background:#f8fafc;border:1px solid #e5e7eb;"
+        "box-shadow:0 1px 2px rgba(0,0,0,.06);font-family:SFMono-Regular,Consolas,Menlo,monospace;"
+        "font-weight:700;font-size:24px;color:#111;text-align:center;"
+    )
+    otp_boxes = "".join(f'<span style="{box_style}">{c}</span>' for c in str(otp).strip())
+
+    return f"""
+    <!DOCTYPE html>
+        <html lang="en">
+        <body style="margin:0;padding:0;background:#f6f7fb;font-family:Arial,Helvetica,sans-serif;color:#111;">
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+            <tr>
+                    <td align="center" style="padding:24px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+                        style="max-width:600px;background:#ffffff;border-radius:12px;
+                            box-shadow:0 2px 8px rgba(0,0,0,0.05);overflow:hidden;">
+                        
+                        <!-- Header -->
+                        <tr><td style="padding:28px 28px 8px 28px;">
+                            <h1 style="margin:0 0 8px 0;font-size:20px;line-height:1.3;color:#111;">
+                                Confirm your account
+                            </h1>
+                            <p style="margin:0 0 16px 0;font-size:14px;color:#444;">
+                                Use the OTP below to complete your registration.
+                            </p>
+                        </td></tr>
+
+                        <!-- OTP Display -->
+                        <tr><td align="center" style="padding:8px 28px 16px 28px;">
+                            {otp_boxes}
+                        </td></tr>
+
+                        <!-- Expiry Info -->
+                        <tr><td style="padding:0 28px 24px 28px;">
+                            <p style="margin:0 0 8px 0;font-size:12px;color:#666;">
+                                This code will expire in <strong>3 minutes</strong>.
+                            </p>
+                            <p style="margin:0;font-size:12px;color:#999;">
+                                If you didn’t request this, you can safely ignore this email.
+                            </p>
+                        </td></tr>
+
+                        <!-- Footer -->
+                        <tr><td style="padding:12px 28px 24px 28px;border-top:1px solid #eee;">
+                            <p style="margin:0;font-size:12px;color:#9aa1a9;text-align:center;">
+                                This is an automated message—no reply is required.
+                            </p>
+                        </td></tr>
+                    </table>
+
+                    <div style="font-size:11px;color:#9aa1a9;margin-top:12px;">
+                        Sent from your trusted service.
+                    </div>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+    """
+
+
+    
+def send_otp_sign_email(to_email: str, otp: str, otp_type: str = "reset_password") -> bool:
+    """ส่ง OTP แบบ HTML-only
+    otp_type: 'reset_password' หรือ 'sign_up'
+    """
+    server = get_smtp_connection()
+    if not server:
+        return False
+
+    try:
+        if otp_type == "sign_up":
+            html = _build_signup_otp_email_html(otp)
+            subject = "Automated Vehicle Tagging System - Your OTP for Sign Up"
+        else:
+            html = _build_otp_email_html(otp)
+            subject = "Automated Vehicle Tagging System - Your OTP for Password Reset"
+
+        msg = MIMEText(html, "html", "utf-8")
+        msg["Subject"] = subject
+        msg["From"] = EMAIL_ADDRESS
+        msg["To"] = to_email
+
+        server.send_message(msg)
+        return_smtp_connection(server)
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+        try:
+            server.quit()
+        except:
+            pass
+        return False
+

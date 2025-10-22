@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:dotted_border/dotted_border.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
 
@@ -50,6 +51,7 @@ class _FileUploadState extends State<FileUpload> {
   List<String> errors = [];
   final TextEditingController modelNameController = TextEditingController();
   String? modelNameError;
+  static final String? baseUrl = dotenv.env['API_BASE_URL'];
 
   @override
   void initState() {
@@ -176,10 +178,9 @@ class _FileUploadState extends State<FileUpload> {
       });
     }
 
-    // ตรวจสอบไฟล์และขนาด
-    if (selectedFiles.length < 5 || totalSize > 5 * 1024 * 1024) {
+    if (selectedFiles.length < 10 || totalSize > 5 * 1024 * 1024) {
       debugPrint(
-        '❌ File validation failed: ${selectedFiles.length} files, ${totalSize} bytes',
+        '❌ File validation failed: ${selectedFiles.length} files, $totalSize bytes',
       );
       return;
     }
@@ -189,14 +190,12 @@ class _FileUploadState extends State<FileUpload> {
       return;
     }
 
-    // เรียก callback เมื่อเริ่มอัปโหลด
     if (widget.onUploadStart != null) {
       widget.onUploadStart!();
     }
 
     try {
-      // เริ่มอัปโหลดไฟล์
-      final uri = Uri.parse("http://127.0.0.1:5000/upload-sticker-model");
+      final uri = Uri.parse("$baseUrl/model/upload");
       final request = http.MultipartRequest("POST", uri);
       request.fields['model_name'] = modelName;
       request.fields['location_id'] = widget.locationId;
@@ -224,27 +223,25 @@ class _FileUploadState extends State<FileUpload> {
       final streamedRes = await request.send();
       final response = await http.Response.fromStream(streamedRes);
 
-      if (response.statusCode == 201) {
+      if (response.statusCode == 200) {
         setState(() {
           selectedFiles.clear();
           errors.clear();
           modelNameController.clear();
         });
 
-        // เรียก callback เมื่ออัปโหลดสำเร็จ
         if (widget.onUploadComplete != null) {
           widget.onUploadComplete!();
         }
       } else {
         debugPrint('❌ Upload failed: ${response.body}');
-        // เรียก callback เมื่อเกิดข้อผิดพลาด
         if (widget.onUploadError != null) {
           widget.onUploadError!();
         }
       }
     } catch (e) {
       debugPrint('❌ Upload error: $e');
-      // เรียก callback เมื่อเกิดข้อผิดพลาด
+
       if (widget.onUploadError != null) {
         widget.onUploadError!();
       }
@@ -300,7 +297,7 @@ class _FileUploadState extends State<FileUpload> {
               ],
             ),
             const SizedBox(height: 16),
-            _buildUsageInstructions(),
+            buildUsageInstructions(),
             const SizedBox(height: 16),
             DottedBorder(
               color: const Color(0xFF9CA3AF),
@@ -427,107 +424,105 @@ class _FileUploadState extends State<FileUpload> {
                 ],
               ),
               const SizedBox(height: 16),
-              Container(
-                child: Column(
-                  children: List.generate(selectedFiles.length, (index) {
-                    final fileWrapper = selectedFiles[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9FAFB),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEFF6FF),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Icon(
-                              Icons.image,
-                              size: 16,
-                              color: Color(0xFF2563EB),
-                            ),
+              Column(
+                children: List.generate(selectedFiles.length, (index) {
+                  final fileWrapper = selectedFiles[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  fileWrapper.name,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Color(0xFF111827),
+                          child: const Icon(
+                            Icons.image,
+                            size: 16,
+                            color: Color(0xFF2563EB),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                fileWrapper.name,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF111827),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Text(
+                                    formatFileSize(fileWrapper.size),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF6B7280),
+                                    ),
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    Text(
-                                      formatFileSize(fileWrapper.size),
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Color(0xFF6B7280),
-                                      ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
                                     ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
+                                    decoration: BoxDecoration(
+                                      color: fileWrapper.isWeb
+                                          ? const Color(0xFFDCFCE7)
+                                          : const Color(0xFFEFF6FF),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      fileWrapper.isWeb ? 'Web' : 'File',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
                                         color: fileWrapper.isWeb
-                                            ? const Color(0xFFDCFCE7)
-                                            : const Color(0xFFEFF6FF),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        fileWrapper.isWeb ? 'Web' : 'File',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w500,
-                                          color: fileWrapper.isWeb
-                                              ? const Color(0xFF059669)
-                                              : const Color(0xFF2563EB),
-                                        ),
+                                            ? const Color(0xFF059669)
+                                            : const Color(0xFF2563EB),
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            onPressed: widget.isUploading
-                                ? null
-                                : () => removeFile(index),
-                            icon: const Icon(
-                              Icons.close,
-                              size: 16,
-                              color: Color(0xFFEF4444),
-                            ),
+                        ),
+                        IconButton(
+                          onPressed: widget.isUploading
+                              ? null
+                              : () => removeFile(index),
+                          icon: const Icon(
+                            Icons.close,
+                            size: 16,
+                            color: Color(0xFFEF4444),
                           ),
-                        ],
-                      ),
-                    );
-                  }),
-                ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
               ),
             ],
             const SizedBox(height: 16),
             Row(
               children: [
                 Text(
-                  selectedFiles.length < 5
-                      ? '${5 - selectedFiles.length} more images needed'
+                  selectedFiles.length < 10
+                      ? '${10 - selectedFiles.length} more images needed'
                       : selectedFiles.fold(0, (sum, file) => sum + file.size) >
                             5 * 1024 * 1024
                       ? 'Total size exceeds 5MB'
@@ -536,7 +531,7 @@ class _FileUploadState extends State<FileUpload> {
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                     color:
-                        (selectedFiles.length >= 5 &&
+                        (selectedFiles.length >= 10 &&
                             selectedFiles.fold(
                                   0,
                                   (sum, file) => sum + file.size,
@@ -702,10 +697,10 @@ class _FileUploadState extends State<FileUpload> {
     );
   }
 
-  Widget _buildUsageInstructions() {
+  Widget buildUsageInstructions() {
     final instructions = [
       'Model accuracy depends on the quality and variety of the uploaded images **',
-      'Upload at least 5 high-quality images (PNG or JPG format)',
+      'Upload at least 10 high-quality images (PNG or JPG format) from multiple angles',
       'Total size of all images must not exceed 5MB',
       'Only one model can be active at a time',
       'You can reactivate previous models at any time',

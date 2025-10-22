@@ -10,6 +10,7 @@ import '../widgets/location/location_card.dart';
 import '../widgets/location/add_location_dialog.dart';
 import '../widgets/loading.dart';
 import '../widgets/location/add_license_dialog.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,6 +23,7 @@ class _HomePageState extends State<HomePage> {
   bool isLoading = true;
   String _searchQuery = '';
   bool _sortDescending = true;
+  static final String? baseUrl = dotenv.env['API_BASE_URL'];
 
   @override
   void initState() {
@@ -132,7 +134,7 @@ class _HomePageState extends State<HomePage> {
 
     if (confirm == true) {
       final response = await http.delete(
-        Uri.parse('http://127.0.0.1:5000/delete_location/${location.id}'),
+        Uri.parse('$baseUrl/delete_location/${location.id}'),
       );
 
       if (!mounted) return;

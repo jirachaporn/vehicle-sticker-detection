@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../providers/permission_provider.dart';
-import '../models/permission.dart';
 
 // Tabs
 import '../widgets/permission/members_tab.dart';
@@ -40,6 +39,7 @@ class _PermissionPageState extends State<PermissionPage>
   String invitePerm = 'view';
   bool loading = false;
   bool loadingInvite = false;
+  static final String? baseUrl = dotenv.env['API_BASE_URL'];
 
   // --- life cycle ---
   @override
@@ -85,40 +85,30 @@ class _PermissionPageState extends State<PermissionPage>
     setState(() => loadingInvite = true);
 
     try {
-      // 1) เพิ่ม/อัปเดตสมาชิกเป็นสถานะ invited
-      final permType = PermissionTypeX.fromDb(invitePerm);
-      await provider.upsertMember(
-        locationId: widget.locationId,
-        email: email,
-        name: name.isEmpty ? null : name,
-        permission: permType,
-        status: MemberStatus.invited,
-      );
-
-      // 2) ขอ token สำหรับยืนยัน (ให้ provider.invite สร้าง base64url)
+      // 1) ขอ token สำหรับยืนยัน (บันทึกใน permission_log เท่านั้น)
       final token = await provider.invite(
         locationId: widget.locationId,
-        inviteEmail: email, // lower-case
+        inviteEmail: email,
         permission: invitePerm.toLowerCase(), // 'view' | 'edit' | 'owner'
         inviteName: name.isEmpty ? null : name,
       );
 
-      // 3) สร้างลิงก์ยืนยัน (encode token กันอักขระพิเศษ)
+      // 2) สร้างลิงก์ยืนยัน (encode token กันอักขระพิเศษ)
       final baseUrlRaw = dotenv.env['SUPABASE_URL'] ?? '';
       final baseUrl = baseUrlRaw.replaceAll(RegExp(r'/$'), '');
       final encodedToken = Uri.encodeComponent(token);
       final confirmLink =
           '$baseUrl/functions/v1/confirm-permission?token=$encodedToken';
 
-      // 4) ส่งอีเมลเชิญ
+      // 3) ส่งอีเมลเชิญ
       await sendInviteEmail(
-        toEmail: rawEmail, // แสดงตามที่กรอก
+        toEmail: rawEmail,
         linkUrl: confirmLink,
         invitedName: name,
         locationName: widget.locationName,
       );
 
-      // 5) แจ้งสำเร็จ + คัดลอกลิงก์
+      // 4) แจ้งสำเร็จ + คัดลอกลิงก์
       if (!mounted) return;
       await copyToClipboardAndDialogSuccess(
         context,
@@ -128,13 +118,10 @@ class _PermissionPageState extends State<PermissionPage>
         copyText: confirmLink,
       );
 
-      // 6) เคลียร์ฟอร์ม
+      // 5) เคลียร์ฟอร์ม
       inviteEmailCtrl.clear();
       inviteNameCtrl.clear();
       setState(() => invitePerm = 'view');
-
-      // 7) รีเฟรชรายชื่อ
-      await provider.loadMembers(widget.locationId);
     } catch (e, st) {
       debugPrint('[handleInvite] error: $e\n$st');
       if (!mounted) return;
@@ -142,10 +129,6 @@ class _PermissionPageState extends State<PermissionPage>
     } finally {
       if (mounted) setState(() => loadingInvite = false);
     }
-  }
-
-  Future<void> handleExpireSweep() async {
-    toast(context, 'Expired invitation sweep is not supported in this version');
   }
 
   // ----- helpers -----
@@ -156,7 +139,7 @@ class _PermissionPageState extends State<PermissionPage>
     String? locationName,
   }) async {
     // ปรับเป็น backend จริงของคุณ
-    final endpoint = Uri.parse('http://127.0.0.1:5000/send-permission-email');
+    final endpoint = Uri.parse('$baseUrl/permission/send-permission');
 
     final res = await http.post(
       endpoint,
@@ -205,7 +188,7 @@ class _PermissionPageState extends State<PermissionPage>
           labelColor: const Color(0xFF2563EB),
           unselectedLabelColor: Colors.black54,
           overlayColor: WidgetStateProperty.all(
-            const Color(0xFF2563EB).withValues(alpha:  0.1),
+            const Color(0xFF2563EB).withValues(alpha: 0.1),
           ),
           tabs: const [
             Tab(text: 'Members'),
@@ -237,10 +220,7 @@ class _PermissionPageState extends State<PermissionPage>
                   loading: loadingInvite,
                   onSubmit: handleInvite,
                 ),
-                LogsTab(
-                  locationId: widget.locationId,
-                  onExpireSweep: handleExpireSweep,
-                ),
+                LogsTab(locationId: widget.locationId),
               ],
             ),
     );

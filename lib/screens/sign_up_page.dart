@@ -1,14 +1,18 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+import 'package:crypto/crypto.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:myproject/widgets/snackbar/fail_snackbar.dart';
 import 'package:myproject/widgets/snackbar/success_snackbar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:myproject/models/user_str.dart';
 import 'package:myproject/screens/sign_in_page.dart';
 import 'package:myproject/widgets/back_to_sign.dart';
 import '../widgets/background.dart';
+import 'otp_page.dart';
+import '../providers/api_service.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -18,7 +22,7 @@ class SignUpPage extends StatefulWidget {
 
 class _SignUpPageState extends State<SignUpPage> {
   bool isLoading = false;
-  bool isUsernameTaken = false;
+  bool isEmailTaken = false;
   bool _obscureText = true;
 
   final formKey = GlobalKey<FormState>();
@@ -33,188 +37,93 @@ class _SignUpPageState extends State<SignUpPage> {
   void _togglePasswordVisibility() =>
       setState(() => _obscureText = !_obscureText);
 
-  // ใช้ Edge Function เป็นหน้า landing หลังยืนยันอีเมล
-  // ตั้งค่าใน .env: CONFIRM_REDIRECT_URL=https://.../functions/v1/confirm-signup
-  String _buildEmailRedirect() {
-    final url =
-        (dotenv.env['CONFIRM_REDIRECT_URL'] ??
-                'https://qwiofwruecrdyfqdbwvu.supabase.co/functions/v1/confirm-signup')
-            .trim();
-    return url.endsWith('/') ? url.substring(0, url.length - 1) : url;
-  }
-
-  Future<void> checkUsernameExists(String username) async {
+  Future<void> checkEmailExists(String email) async {
     final supabase = Supabase.instance.client;
-    final u = username.trim();
+    final e = email.trim();
+
     try {
       final res = await supabase
-          .from('users')
-          .select('id')
-          .eq('username', u)
-          .limit(1);
-      setState(() => isUsernameTaken = res.isNotEmpty);
-    } on PostgrestException {
-      setState(() => isUsernameTaken = false);
-    } catch (_) {
-      setState(() => isUsernameTaken = false);
-    }
-  }
+          .from('auth_users')
+          .select('auth_id')
+          .eq('auth_email', e)
+          .maybeSingle();
 
-  Future<void> _showConfirmDialog(String title, String message) async {
-    await showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.error_outline, color: Colors.amber[700]),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Confirm Your Email',
-                      style: GoogleFonts.roboto(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                        color: Colors.amber[700],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  message,
-                  style: GoogleFonts.roboto(
-                    fontSize: 16,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      backgroundColor: const Color(0xFF3254D0),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('OK'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+      debugPrint('checkEmailExists: $res');
+      setState(() => isEmailTaken = res != null);
+    } on PostgrestException catch (err) {
+      debugPrint('Supabase error: ${err.message}');
+      setState(() => isEmailTaken = false);
+    } catch (err) {
+      debugPrint('Unknown error: $err');
+      setState(() => isEmailTaken = false);
+    }
   }
 
   // --- Sign up ---------------------------------------------------------------
   Future<void> signUpUser() async {
-    userStr.email = userStr.email.trim();
-    userStr.username = userStr.username.trim();
+    final email = userStr.email.trim();
+    final username = userStr.username.trim();
+    final password = userStr.password;
+
     if (!(formKey.currentState?.validate() ?? false)) return;
 
     setState(() => isLoading = true);
-    final supabase = Supabase.instance.client;
-
-    final colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#AB47BC'];
-    final color = colors[Random.secure().nextInt(colors.length)];
 
     try {
-      final email = userStr.email;
-      final username = userStr.username;
-      final redirectUrl = _buildEmailRedirect();
-
-      if (!RegExp(r'^[A-Za-z0-9_]{3,20}$').hasMatch(username)) {
-        showFailMessage(
-          'Invalid username',
-          'Use 3–20 chars: A–Z a–z 0–9 or underscore.',
-        );
+      // เช็คอีเมลซ้ำ
+      await checkEmailExists(email);
+      if (isEmailTaken) {
+        showFailMessage('Email Error', 'Email already registered');
         return;
       }
 
-      debugPrint('🔄 Starting signup process...');
-      debugPrint('Email: $email');
-      debugPrint('Username: $username');
-      debugPrint('Color: $color');
-      debugPrint('Redirect: $redirectUrl');
-
-      final authRes = await supabase.auth.signUp(
-        email: email,
-        password: userStr.password,
-        emailRedirectTo: redirectUrl,
-        data: {'username': username, 'color_profile': color},
-      );
-
-      if (authRes.user == null) {
-        throw const AuthException(
-          'User creation returned null',
-          statusCode: '500',
-        );
-      }
-      debugPrint('✅ Auth user created: ${authRes.user!.id}');
-
-      if (!mounted) return;
-
-      if (authRes.user!.emailConfirmedAt == null) {
-        await _showConfirmDialog(
-          'Confirm Your Email',
-          'We sent a confirmation link to:\n\n$email\n\nPlease verify your email before logging in.',
-        );
+      // ส่ง OTP
+      final otpRes = await ApiService.sendSignupOtp(email);
+      if (otpRes['success'] != true) {
+        showFailMessage('OTP Error', otpRes['message'] ?? 'Failed to send OTP');
+        return;
       }
 
-      if (!mounted) return;
-      Navigator.pushReplacement(
+      await Navigator.push<String>(
         context,
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 120),
-          pageBuilder: (_, __, ___) => const SignInPage(),
-          transitionsBuilder: (_, animation, __, child) =>
-              FadeTransition(opacity: animation, child: child),
+        MaterialPageRoute(
+          builder: (_) => OTPPage(email: email, type: 'signup'),
         ),
       );
-    } on AuthException catch (e) {
-      debugPrint('❌ Signup failed: ${e.message}');
-      debugPrint('📄 Error code: ${e.statusCode}');
-      String userMessage =
-          'There was a database error while creating your account. Please try again.';
-      final m = e.message.toLowerCase();
-      if (m.contains('user already registered')) {
-        userMessage =
-            'This email is already registered. Try signing in instead.';
-      } else if (m.contains('invalid email')) {
-        userMessage = 'Please enter a valid email address.';
-      }
-      showFailMessage('Signup Failed', userMessage);
+
+      final supabase = Supabase.instance.client;
+      final passwordHash = sha256.convert(utf8.encode(password)).toString();
+      final colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#AB47BC'];
+      final color = colors[Random.secure().nextInt(colors.length)];
+      final newAuthId = const Uuid().v4();
+      final nowThai = DateTime.now().toUtc().add(const Duration(hours: 7));
+
+      await supabase.from('auth_users').insert({
+        'auth_id': newAuthId,
+        'auth_email': email,
+        'auth_username': username,
+        'password_hash': passwordHash,
+        'created_at': nowThai.toIso8601String(),
+        'last_sign_in': null,
+      });
+
+      await supabase.from('users').insert({
+        'user_id': newAuthId, 
+        'user_name': username,
+        'user_email': email,
+        'color_profile': color,
+        'user_role': 'user',
+      });
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const SignInPage()),
+      );
     } catch (e) {
-      debugPrint('❌ Signup failed (unknown): $e');
-      String userMessage = 'An unexpected error occurred';
-
-      final s = e.toString().toLowerCase();
-      if (s.contains('duplicate key') && s.contains('username')) {
-        userMessage =
-            'This username is already taken. Please choose a different one.';
-      }
-
-      showFailMessage('Signup Failed', userMessage);
+      debugPrint('❌ Signup failed: $e');
+      showFailMessage('Signup Failed', 'Please try to sign up again.');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -324,20 +233,11 @@ class _SignUpPageState extends State<SignUpPage> {
                     TextFormField(
                       controller: usernameController,
                       onChanged: (v) {
-                        final s = v.trim();
-                        userStr.username = s;
-                        if (s.length >= 3) {
-                          checkUsernameExists(s);
-                        } else {
-                          setState(() => isUsernameTaken = false);
-                        }
+                        userStr.username = v.trim();
                       },
                       onSaved: (v) => userStr.username = (v ?? '').trim(),
                       decoration: InputDecoration(
                         labelText: 'Username',
-                        errorText: isUsernameTaken
-                            ? 'Username already exists'
-                            : null,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -349,16 +249,27 @@ class _SignUpPageState extends State<SignUpPage> {
                         return null;
                       },
                     ),
+
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: emailController,
-                      onChanged: (v) => userStr.email = v,
+                      onChanged: (v) async {
+                        userStr.email = v.trim();
+                        if (v.trim().isNotEmpty) {
+                          await checkEmailExists(v.trim());
+                        } else {
+                          setState(() => isEmailTaken = false);
+                        }
+                      },
                       onSaved: (v) => userStr.email = (v ?? '').trim(),
                       decoration: InputDecoration(
                         labelText: 'Email',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
+                        errorText: isEmailTaken
+                            ? 'This email is already registered'
+                            : null,
                       ),
                       validator: (v) {
                         final s = (v ?? '').trim();
@@ -368,9 +279,13 @@ class _SignUpPageState extends State<SignUpPage> {
                         ).hasMatch(s)) {
                           return 'Invalid email';
                         }
+                        if (isEmailTaken) {
+                          return 'This email is already registered';
+                        }
                         return null;
                       },
                     ),
+
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: password_Controller,
@@ -394,11 +309,13 @@ class _SignUpPageState extends State<SignUpPage> {
                         final s = v ?? '';
                         if (s.isEmpty) return 'Enter password';
                         if (s.length < 8) return 'Min 8 chars';
-                        if (!RegExp(r'[A-Z]').hasMatch(s))
+                        if (!RegExp(r'[A-Z]').hasMatch(s)) {
                           return '1 uppercase letter';
+                        }
                         if (!RegExp(r'[0-9]').hasMatch(s)) return '1 digit';
-                        if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(s))
+                        if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(s)) {
                           return '1 special char';
+                        }
                         return null;
                       },
                     ),
@@ -414,14 +331,15 @@ class _SignUpPageState extends State<SignUpPage> {
                       ),
                       validator: (v) {
                         if ((v ?? '').isEmpty) return 'Confirm password';
-                        if (v != password_Controller.text)
+                        if (v != password_Controller.text) {
                           return 'Passwords do not match';
+                        }
                         return null;
                       },
                     ),
                     const SizedBox(height: 16),
                     ElevatedButton(
-                      onPressed: isLoading || isUsernameTaken
+                      onPressed: isLoading || isEmailTaken
                           ? null
                           : () async {
                               if (formKey.currentState?.validate() ?? false) {

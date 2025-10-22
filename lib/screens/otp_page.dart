@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:myproject/screens/sign_in_page.dart';
 import 'package:myproject/widgets/loading.dart';
 import '../widgets/background.dart';
 import 'reset_password.dart';
@@ -10,7 +11,8 @@ import '../widgets/snackbar/fail_snackbar.dart';
 
 class OTPPage extends StatefulWidget {
   final String email;
-  const OTPPage({super.key, required this.email});
+  final String type;
+  const OTPPage({super.key, required this.email, required this.type});
 
   @override
   State<OTPPage> createState() => _OTPPageState();
@@ -59,7 +61,7 @@ class _OTPPageState extends State<OTPPage> {
   @override
   void dispose() {
     timer?.cancel();
-    resendTimer?.cancel(); 
+    resendTimer?.cancel();
     for (var controller in controllers) {
       controller.dispose();
     }
@@ -127,7 +129,6 @@ class _OTPPageState extends State<OTPPage> {
 
   // กดขอ OTP ใหม่
   void resetOtp() async {
-    // กันเผลากดซ้ำระหว่างคูลดาวน์ (ปกติ onPressed จะถูก disable อยู่แล้ว)
     if (resendCooldown > 0) return;
 
     setState(() => isLoading = true);
@@ -137,21 +138,25 @@ class _OTPPageState extends State<OTPPage> {
       }
       setState(() => isOtpIncorrect = false);
 
-      final ok = await ApiService.sendOtp(widget.email);
+      bool ok = false;
+      if (widget.type == 'signup') {
+        final res = await ApiService.sendSignupOtp(widget.email);
+        ok = res['success'] == true;
+      } else {
+        ok = await ApiService.sendOtp(widget.email);
+      }
+
       if (!mounted) return;
 
       if (ok) {
-        startCountdown(); // เริ่มนับ 3 นาทีใหม่
-        startResendCooldown(); // เริ่มคูลดาวน์ 30 วิใหม่
+        startCountdown();
+        startResendCooldown();
         FocusScope.of(context).requestFocus(focusNodes[0]);
       } else {
-        showFailMessage(
-          'Error',
-          'Failed to resend the code. Please try again.',
-        );
+        showFailMessage('Error', 'Failed to resend the code.');
       }
     } catch (e) {
-      if (mounted) showFailMessage('Error', 'An unexpected error occurred');
+      if (mounted) showFailMessage('Error', 'Unexpected error occurred');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -168,14 +173,30 @@ class _OTPPageState extends State<OTPPage> {
         });
         return;
       }
-      final success = await ApiService.verifyOtp(widget.email, enteredOtp);
-      if (success && mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ResetPasswordPage(email: widget.email),
-          ),
-        );
+      bool success = false;
+      if (widget.type == 'signup') {
+        final res = await ApiService.verifySignupOtp(widget.email, enteredOtp);
+        success = res['success'] == true;
+      } else {
+        success = await ApiService.verifyOtp(widget.email, enteredOtp);
+      }
+
+      if (!mounted) return;
+
+      if (success) {
+        if (widget.type == 'reset') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ResetPasswordPage(email: widget.email),
+            ),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const SignInPage()),
+          );
+        }
       } else {
         setState(() => isOtpIncorrect = true);
         showFailMessage('OTP Failed', 'Invalid or expired OTP.');
@@ -322,14 +343,18 @@ class _OTPPageState extends State<OTPPage> {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.black),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      InkWell(
-                        onTap: () => Navigator.pop(context),
-                        child: const Text(
-                          'Back to Sign in',
-                          style: TextStyle(color: Colors.black),
-                        ),
+                        onPressed: () {
+                          if (widget.type == 'signup') {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const SignInPage(),
+                              ),
+                            );
+                          } else {
+                            Navigator.pop(context);
+                          }
+                        },
                       ),
                     ],
                   ),

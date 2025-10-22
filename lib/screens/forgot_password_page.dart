@@ -89,7 +89,7 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
       }
 
       // มีอีเมลแล้ว → ส่ง OTP
-      final success = await ApiService.sendOtp(email);
+      final success = await ApiService.sendOtp(email) ;
 
       setState(() => isLoading = false);
 
@@ -98,7 +98,7 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
           context,
           PageRouteBuilder(
             transitionDuration: const Duration(milliseconds: 100),
-            pageBuilder: (_, __, ___) => OTPPage(email: email),
+            pageBuilder: (_, __, ___) => OTPPage(email: email, type: 'reset',),
             transitionsBuilder: (_, animation, __, child) =>
                 FadeTransition(opacity: animation, child: child),
           ),

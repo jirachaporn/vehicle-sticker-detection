@@ -1,8 +1,6 @@
 // lib/widgets/permission/members_tab.dart
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-
 import '../../providers/permission_provider.dart';
 import '../../models/permission.dart';
 import '../snackbar/fail_snackbar.dart';
@@ -28,12 +26,8 @@ class _MembersTabState extends State<MembersTab> {
     future = context.read<PermissionProvider>().loadMembers(widget.locationId);
   }
 
-  String fmt(DateTime? d) =>
-      d == null ? '-' : DateFormat('yyyy-MM-dd HH:mm').format(d);
-
   void showSuccessMessage(String message) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
+    final overlay = Navigator.of(context, rootNavigator: true).overlay;
     if (overlay == null) return;
 
     late OverlayEntry entry;
@@ -46,9 +40,7 @@ class _MembersTabState extends State<MembersTab> {
           elevation: 20,
           child: SuccessSnackbar(
             message: message,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
+            onClose: () => entry.remove(),
           ),
         ),
       ),
@@ -60,9 +52,8 @@ class _MembersTabState extends State<MembersTab> {
     });
   }
 
-  void showFailMessage(String errorMessage, dynamic error) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
+  void showFailMessage(String title, dynamic message) {
+    final overlay = Navigator.of(context, rootNavigator: true).overlay;
     if (overlay == null) return;
 
     late OverlayEntry entry;
@@ -74,11 +65,9 @@ class _MembersTabState extends State<MembersTab> {
           color: Colors.transparent,
           elevation: 50,
           child: FailSnackbar(
-            title: errorMessage,
-            message: error,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
+            title: title,
+            message: message,
+            onClose: () => entry.remove(),
           ),
         ),
       ),
@@ -88,32 +77,6 @@ class _MembersTabState extends State<MembersTab> {
     Future.delayed(const Duration(seconds: 3)).then((_) {
       if (entry.mounted) entry.remove();
     });
-  }
-
-  int rank(MemberStatus s) {
-    switch (s) {
-      case MemberStatus.confirmed:
-        return 1;
-      case MemberStatus.invited:
-        return 2;
-      case MemberStatus.revoked:
-      case MemberStatus.expired:
-        return 3;
-      default:
-        return 4;
-    }
-  }
-
-  List<PermissionMember> sort(List<PermissionMember> items) {
-    final list = [...items];
-    list.sort((a, b) {
-      final c = rank(a.status) - rank(b.status);
-      if (c != 0) return c;
-      final ad = a.createdAt ?? DateTime(2000);
-      final bd = b.createdAt ?? DateTime(2000);
-      return bd.compareTo(ad);
-    });
-    return list;
   }
 
   Future<void> refresh() async {
@@ -132,7 +95,6 @@ class _MembersTabState extends State<MembersTab> {
     }
   }
 
-  //
   Widget disableBtn(VoidCallback onPressed) {
     return TextButton(
       style: TextButton.styleFrom(
@@ -153,16 +115,11 @@ class _MembersTabState extends State<MembersTab> {
   Widget build(BuildContext context) {
     final provider = context.watch<PermissionProvider>();
 
-    if (future == null) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-    }
-
-    // BG ขาวทั้งแท็บ
     return Container(
       color: Colors.grey.shade100,
       padding: const EdgeInsets.all(16),
       child: FutureBuilder<List<PermissionMember>>(
-        future: future!,
+        future: future,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
             return const Center(
@@ -170,10 +127,10 @@ class _MembersTabState extends State<MembersTab> {
             );
           }
           if (snap.hasError) {
-            return Center(child: Text('loading failed: ${snap.error}'));
+            return Center(child: Text('Loading failed: ${snap.error}'));
           }
 
-          final members = sort(snap.data ?? []);
+          final members = snap.data ?? [];
 
           return Column(
             children: [
@@ -200,7 +157,6 @@ class _MembersTabState extends State<MembersTab> {
                 ],
               ),
               const SizedBox(height: 12),
-
               Expanded(
                 child: ListView.builder(
                   itemCount: members.length,
@@ -220,7 +176,6 @@ class _MembersTabState extends State<MembersTab> {
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
-                            // Avatar
                             CircleAvatar(
                               radius: 20,
                               backgroundColor: Colors.grey.shade200,
@@ -234,8 +189,6 @@ class _MembersTabState extends State<MembersTab> {
                               ),
                             ),
                             const SizedBox(width: 12),
-
-                            // Info
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -248,7 +201,7 @@ class _MembersTabState extends State<MembersTab> {
                                   ),
                                   Text('name: ${m.name ?? "-"}'),
                                   Text(
-                                    'status: ${m.status.label} • ${fmt(m.createdAt)}',
+                                    'permission: ${m.permission.label}',
                                     style: TextStyle(
                                       color: Colors.grey.shade600,
                                       fontSize: 12,
@@ -257,8 +210,6 @@ class _MembersTabState extends State<MembersTab> {
                                 ],
                               ),
                             ),
-
-                            // ===== Permission (owner = ชิปเทา; อื่นๆ = ดรอปดาวสไตล์ที่ให้) =====
                             if (isOwner)
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -318,20 +269,6 @@ class _MembersTabState extends State<MembersTab> {
                                         width: 1,
                                       ),
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade300,
-                                        width: 1,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF2563EB),
-                                        width: 2,
-                                      ),
-                                    ),
                                   ),
                                   items: PermissionType.values
                                       .map(
@@ -350,12 +287,11 @@ class _MembersTabState extends State<MembersTab> {
                                   onChanged: (val) async {
                                     if (val == null) return;
                                     try {
-                                      await provider.upsertMember(
+                                      await provider.updatePermission(
                                         locationId: widget.locationId,
                                         email: m.email,
-                                        name: m.name,
-                                        permission: val,
-                                        status: m.status,
+                                        memberName: m.name,
+                                        newPermission: val,
                                       );
                                       if (!mounted) return;
                                       showSuccessMessage(
@@ -370,23 +306,28 @@ class _MembersTabState extends State<MembersTab> {
                                   validator: (_) => null,
                                 ),
                               ),
-
                             const SizedBox(width: 8),
-
-                            //  ปุ่ม Disable
                             if (!isOwner)
                               disableBtn(() async {
                                 try {
-                                  await provider.upsertMember(
+                                  await provider.updatePermission(
                                     locationId: widget.locationId,
                                     email: m.email,
-                                    name: m.name,
-                                    permission: m.permission,
-                                    status: MemberStatus.revoked,
+                                    memberName: m.name,
+                                    newPermission: m.permission,
                                   );
+
+                                  // await provider.upsertMember(
+                                  //   locationId: widget.locationId,
+                                  //   email: m.email,
+                                  //   name: m.name,
+                                  //   permission: m.permission,
+                                  //   status: MemberStatus.revoked,
+                                  // );
+
                                   if (!mounted) return;
                                   showSuccessMessage(
-                                    'Status updated: disabled',
+                                    'Member disabled and logged',
                                   );
                                   await refresh();
                                 } catch (e) {

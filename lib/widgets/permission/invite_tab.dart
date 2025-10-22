@@ -146,6 +146,10 @@ class InviteTab extends StatelessWidget {
                               dropdownColor: Colors.white,
                               elevation: 8,
                               borderRadius: BorderRadius.circular(12),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black, // สีข้อความ
+                              ),
                               decoration: InputDecoration(
                                 labelText: 'Permission *',
                                 labelStyle: const TextStyle(
@@ -181,38 +185,21 @@ class InviteTab extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              items: const [
+                              items: [
                                 DropdownMenuItem<String>(
                                   value: 'view',
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: 10.0,
-                                      horizontal: 4.0,
-                                    ),
-                                    child: Text(
-                                      'Viewer',
-                                      style: TextStyle(fontSize: 14),
-                                    ),
-                                  ),
+                                  child: const Text('Viewer'),
                                 ),
                                 DropdownMenuItem<String>(
                                   value: 'edit',
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: 10.0,
-                                      horizontal: 4.0,
-                                    ),
-                                    child: Text(
-                                      'Editor',
-                                      style: TextStyle(fontSize: 14),
-                                    ),
-                                  ),
+                                  child: const Text('Editor'),
                                 ),
                               ],
                               onChanged: (v) {
                                 if (v != null) onPermChanged(v);
                               },
                             ),
+
                             const SizedBox(height: 16),
                             SizedBox(
                               width: double.infinity,

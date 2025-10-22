@@ -10,7 +10,7 @@ from .routes_table import router as table_router
 
 from .email_permission import router as permission_router
 from .routes_location import router as locations_router
-from .reset_password import router as reset_password_router
+from .router_email import router as email_router
 from .router_model import router as model_router
 from .router_camera import router as camera_router
 
@@ -27,7 +27,7 @@ app.include_router(notifications_router, tags=["notifications"])
 app.include_router(table_router, prefix="/table", tags=["table"])
 app.include_router(permission_router, prefix="/permission", tags=["permission"])
 app.include_router(locations_router, tags=["locations"])
-app.include_router(reset_password_router, prefix="/password", tags=["password"])
+app.include_router(email_router, prefix="/email", tags=["email"])
 app.include_router(model_router, prefix="/model", tags=["model"])
 app.include_router(camera_router, prefix="/camera", tags=["camera"])
 

@@ -1,11 +1,10 @@
-# api_service/reset_password.py
 import os
 from concurrent.futures import ThreadPoolExecutor
 import httpx
 from supabase import create_client
+from datetime import datetime, timedelta
 import random
 import string
-from datetime import datetime, timedelta
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE = os.getenv("SUPABASE_SERVICE_ROLE")
@@ -13,7 +12,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE)
 executor = ThreadPoolExecutor(max_workers=3)
 
 
-def _generate_otp(length=6):
+def _generate_otp(length=4):
     return ''.join(random.choices(string.digits, k=length))
 
 
@@ -26,10 +25,11 @@ def create_and_send_otp(email: str) -> tuple[bool, str]:
     expires_at = (datetime.utcnow() + timedelta(minutes=5)).isoformat()
 
     try:
-        supabase.table("password_reset_log").insert({
-            "reset_email": email,
+        supabase.table("otp_log").insert({
+            "by_email": email,
             "otp_code": otp,
             "reset_used": False,
+            "otp_type": "reset_password",
             "expires_at": expires_at
         }).execute()
 
@@ -41,31 +41,33 @@ def create_and_send_otp(email: str) -> tuple[bool, str]:
         print(f"🔥 Error creating OTP: {e}")
         return False, str(e)
 
+
 def verify_otp(email: str, otp: str) -> tuple[bool, str]:
     """ตรวจสอบ OTP ผ่าน Supabase"""
     if not email or not otp:
         return False, "Email and OTP are required"
 
     try:
-        result = supabase.table("password_reset_log") \
-            .select("reset_id") \
-            .eq("reset_email", email) \
+        result = supabase.table("otp_log") \
+            .select("otp_id") \
+            .eq("by_email", email) \
             .eq("otp_code", otp) \
             .eq("reset_used", False) \
+            .eq("otp_type", "reset_password") \
             .gt("expires_at", datetime.utcnow().isoformat()) \
             .order("created_at", desc=True) \
             .limit(1) \
             .execute()
 
         if result.data and len(result.data) > 0:
-            record_id = result.data[0]["reset_id"]
+            record_id = result.data[0]["otp_id"]
 
             # mark OTP as used (non-blocking)
             def _update():
-                supabase.table("password_reset_log").update({
+                supabase.table("otp_log").update({
                     "reset_used": True,
                     "reset_success": True
-                }).eq("reset_id", record_id).execute()
+                }).eq("otp_id", record_id).execute()
 
             executor.submit(_update)
             return True, "OTP is valid"
@@ -74,6 +76,7 @@ def verify_otp(email: str, otp: str) -> tuple[bool, str]:
     except Exception as e:
         print(f"🔥 Error verifying OTP: {e}")
         return False, str(e)
+
 
 def reset_user_password(email: str, new_password: str) -> tuple[bool, str]:
     """รีเซ็ตรหัสผ่าน Supabase Auth หลังจาก verify OTP"""
@@ -116,6 +119,7 @@ def reset_user_password(email: str, new_password: str) -> tuple[bool, str]:
     except Exception as e:
         print(f"🔥 Exception resetting password: {repr(e)}")
         return False, str(e)
+
 
 def reset_password_with_otp(email: str, otp: str, new_password: str) -> tuple[bool, str]:
     """Verify OTP แล้ว reset password ในขั้นตอนเดียว"""

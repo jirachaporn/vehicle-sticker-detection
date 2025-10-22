@@ -15,7 +15,7 @@ class PermissionEmailResponse(BaseModel):
     ok: bool
     error: str | None = None
 
-@router.post("/send-permission-email", response_model=PermissionEmailResponse)
+@router.post("/send-permission", response_model=PermissionEmailResponse)
 def send_permission_email_endpoint(req: PermissionEmailRequest):
     ok = send_permission_email(
         to_email=req.to_email,

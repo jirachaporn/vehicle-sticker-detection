@@ -101,7 +101,7 @@ class _ManageModelsState extends State<ManageModels> {
         right: 16,
         child: Material(
           color: Colors.transparent,
-          elevation: 50, // สูงกว่า dialog
+          elevation: 50,
           child: FailSnackbar(
             title: errorMessage,
             message: error,
@@ -225,8 +225,8 @@ class _ManageModelsState extends State<ManageModels> {
                             SizedBox(width: 56, height: 56),
                           ],
                         ),
-                        if (activeModel != null) _buildActiveModelSection(),
-                        if (inactiveModels.isNotEmpty) _buildAllModelsSection(),
+                        if (activeModel != null) buildActiveModelSection(),
+                        if (inactiveModels.isNotEmpty) buildAllModelsSection(),
                         LayoutBuilder(
                           builder: (context, constraints) {
                             return SizedBox(
@@ -251,7 +251,7 @@ class _ManageModelsState extends State<ManageModels> {
     );
   }
 
-  Widget _buildActiveModelSection() {
+  Widget buildActiveModelSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -275,7 +275,7 @@ class _ManageModelsState extends State<ManageModels> {
     );
   }
 
-  Widget _buildAllModelsSection() {
+  Widget buildAllModelsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

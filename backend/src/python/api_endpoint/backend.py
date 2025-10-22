@@ -726,7 +726,6 @@ def save_locations():
             "member_email": owner_email,
             "member_name": owner_name,      
             "member_permission": "owner",
-            "member_status": "confirmed",
         }
 
         try:

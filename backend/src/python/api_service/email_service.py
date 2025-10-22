@@ -1,5 +1,5 @@
 # api_service/email_service.py
-from ..utils.email_utils import generate_otp, send_otp_email, send_permission_link_email
+from ..utils.email_utils import generate_otp, send_otp_email, send_otp_sign_email, send_permission_link_email
 
 def create_and_send_otp(email: str) -> bool:
     otp = generate_otp()
@@ -12,7 +12,6 @@ def send_permission_email(to_email: str, link_url: str, invited_name: str = "", 
         if location_name else
         "Automated Vehicle Tagging System - Confirm your access"
     )
-
     success = send_permission_link_email(
         to_email,
         link_url,
@@ -21,3 +20,11 @@ def send_permission_email(to_email: str, link_url: str, invited_name: str = "", 
         subject=subject
     )
     return success
+
+def create_and_send_otp(email: str, otp_type: str = "reset_password") -> tuple[bool, str]:
+    otp = generate_otp()
+    if otp_type == "sign_up":
+        success = send_otp_sign_email(email, otp, otp_type="sign_up")
+    else:
+        success = send_otp_email(email, otp)
+    return success, otp

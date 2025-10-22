@@ -2,7 +2,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:supabase_flutter/supabase_flutter.dart'; // ✅ ใช้เช็ค role admin
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../models/location.dart';
 import 'permission_provider.dart';
@@ -33,6 +34,7 @@ class AppState extends ChangeNotifier {
   AppView get currentView => _currentView;
   Location? get selectedLocation => _selectedLocation;
   List<Location> get locations => _locations;
+  static final String? baseUrl = dotenv.env['API_BASE_URL'];
 
   void setLoggedInEmail(String email) {
     loggedInEmail = email;
@@ -42,7 +44,7 @@ class AppState extends ChangeNotifier {
   /// โหลดรายการสถานที่ที่ผู้ใช้งาน “มีสิทธิ์” จาก backend (ผ่าน location_members)
   Future<void> loadLocations(String email) async {
     final response = await http.get(
-      Uri.parse('http://127.0.0.1:5000/locations?user=$email'),
+      Uri.parse('$baseUrl/get_locations?user=$email'),
     );
 
     if (response.statusCode == 200) {
@@ -108,7 +110,9 @@ class AppState extends ChangeNotifier {
             .select('user_role')
             .eq('user_id', uid)
             .limit(1);
-        final role = rows.isNotEmpty ? (rows.first['user_role'] as String?) : null;
+        final role = rows.isNotEmpty
+            ? (rows.first['user_role'] as String?)
+            : null;
         isAdmin = role == 'admin';
       }
     } catch (e) {
@@ -120,21 +124,21 @@ class AppState extends ChangeNotifier {
 
   // ====== เช็คสิทธิ์ (คงพฤติกรรมเดิม + ให้ admin ผ่านทุกอย่าง) ======
   bool isOwnerWith(PermissionProvider perm) {
-    if (isAdmin) return true;                  // ✅ admin ผ่าน
+    if (isAdmin) return true; // ✅ admin ผ่าน
     final id = locationId;
     if (id == null || id.isEmpty) return false;
     return perm.isOwner(id);
   }
 
   bool canEditWith(PermissionProvider perm) {
-    if (isAdmin) return true;                  // ✅ admin ผ่าน
+    if (isAdmin) return true; // ✅ admin ผ่าน
     final id = locationId;
     if (id == null || id.isEmpty) return false;
     return perm.canEdit(id);
   }
 
   bool canViewWith(PermissionProvider perm) {
-    if (isAdmin) return true;                  // ✅ admin ผ่าน
+    if (isAdmin) return true; // ✅ admin ผ่าน
     final id = locationId;
     if (id == null || id.isEmpty) return false;
     return perm.canView(id);

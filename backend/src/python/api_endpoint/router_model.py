@@ -17,5 +17,6 @@ async def upload_sticker_model(
     location_id: str = Form(...),
     images: List[UploadFile] = File(...)
 ):
-    success, message, data = upload_sticker_model_service(model_name, location_id, images)
+    success, message, data = await upload_sticker_model_service(model_name, location_id, images)
     return UploadModelResponse(success=success, message=message, data=data)
+

@@ -1,15 +1,26 @@
 # model.py
-import time
-from supabase import create_client
 import os
+import time
+from datetime import datetime, timezone
 import cloudinary.uploader
+from supabase import create_client
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE = os.getenv("SUPABASE_SERVICE_ROLE")
-
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE)
 
-def upload_sticker_model_service(model_name: str, location_id: str, files: list):
+cloudinary.config(
+    cloud_name=os.getenv("MY_CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("MY_CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("MY_CLOUDINARY_API_SECRET"),
+    secure=True
+)
+CLOUD_FOLDER = os.getenv("MY_CLOUDINARY_FOLDER", "stickers")
+
+async def upload_sticker_model_service(model_name: str, location_id: str, files: list):
+    """
+    Upload images to Cloudinary and insert new sticker model to Supabase.
+    """
     if not model_name or not location_id:
         return False, "Missing model_name or location_id", None
 
@@ -17,20 +28,21 @@ def upload_sticker_model_service(model_name: str, location_id: str, files: list)
         return False, "Upload at least 5 images", None
 
     image_urls = []
-    created_at = int(time.time())
+    created_at = datetime.now(timezone.utc)  
 
     for file in files:
-        if file.size > 5 * 1024 * 1024:
-            return False, f"{file.filename} exceeds 5MB", None
-
         try:
+            content = await file.read()  
+            if len(content) > 5 * 1024 * 1024:
+                return False, f"{file.filename} exceeds 5MB", None
+
             result = cloudinary.uploader.upload(
-                file.file,
-                folder="model",
+                content,
+                folder=CLOUD_FOLDER,
                 resource_type="image",
                 return_delete_token=True
             )
-            image_urls.append(result["secure_url"])
+            image_urls.append(result.get("secure_url", ""))
         except Exception as e:
             return False, f"Cloudinary upload error: {str(e)}", None
 
@@ -38,7 +50,7 @@ def upload_sticker_model_service(model_name: str, location_id: str, files: list)
         "location_id": location_id,
         "model_name": model_name,
         "is_active": False,
-        "created_at": created_at,
+        "created_at": created_at.isoformat(),  
         "sticker_status": "processing",
         "image_urls": image_urls
     }

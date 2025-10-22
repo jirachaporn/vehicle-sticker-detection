@@ -60,7 +60,6 @@ def get_locations(user_email: str):
                 supabase.table("location_members")
                 .select("location_id")
                 .eq("member_email", user_email)
-                .eq("member_status", "confirmed")
             )
             loc_ids = [m.get("location_id") for m in (mem_res.data or []) if m.get("location_id")]
             if not loc_ids:
@@ -125,7 +124,6 @@ def save_location(data: dict):
             "member_email": owner_email,
             "member_name": owner_name,
             "member_permission": "owner",
-            "member_status": "confirmed",
         }
 
         try:
