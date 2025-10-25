@@ -4,11 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
-import '../snackbar/success_snackbar.dart';
-import '../snackbar/fail_snackbar.dart';
 import '../../models/location.dart';
 import '../../providers/app_state.dart';
 import 'excel_import_dialog.dart';
+import '../../providers/snackbar_helper.dart';
 
 // ===================== ฟังก์ชัน (ไฟล์) =====================
 InputDecoration fieldDec(String label, {String? hint}) {
@@ -26,56 +25,6 @@ InputDecoration fieldDec(String label, {String? hint}) {
       borderRadius: BorderRadius.circular(12),
     ),
   );
-}
-
-void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
-  final ctx = Navigator.of(context, rootNavigator: true).context;
-  ScaffoldMessenger.of(ctx).showSnackBar(
-    SnackBar(
-      elevation: 20,
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: Colors.transparent,
-      duration: const Duration(seconds: 3),
-      padding: EdgeInsets.zero,
-      content: Align(
-        alignment: Alignment.topRight,
-        child: FailSnackbar(
-          title: errorMessage,
-          message: error,
-          onClose: () => ScaffoldMessenger.of(ctx).hideCurrentSnackBar(),
-        ),
-      ),
-    ),
-  );
-}
-
-void showSuccessMessage(BuildContext context, String message) {
-  final nav = Navigator.of(context, rootNavigator: true);
-  final overlay = nav.overlay;
-  if (overlay == null) return;
-
-  late OverlayEntry entry;
-  entry = OverlayEntry(
-    builder: (_) => Positioned(
-      top: 90,
-      right: 16,
-      child: Material(
-        color: Colors.transparent,
-        elevation: 20,
-        child: SuccessSnackbar(
-          message: message,
-          onClose: () {
-            if (entry.mounted) entry.remove();
-          },
-        ),
-      ),
-    ),
-  );
-
-  overlay.insert(entry);
-  Future.delayed(const Duration(seconds: 3)).then((_) {
-    if (entry.mounted) entry.remove();
-  });
 }
 
 // ===================== class (ตัวหลัก) =====================

@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:myproject/screens/sign_in_page.dart';
 import 'package:myproject/widgets/back_to_sign.dart';
-import 'package:myproject/widgets/snackbar/success_snackbar.dart';
 import '../widgets/background.dart';
-import '../widgets/snackbar/fail_snackbar.dart';
 import '../widgets/loading.dart';
 import 'package:myproject/providers/api_service.dart';
+import '../providers/snackbar_helper.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   final String email;
@@ -46,7 +45,7 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
     });
 
     if (!isMatch) {
-      showFailMessage('Error', 'Passwords do not match');
+      showFailMessage(context,'Error', 'Passwords do not match');
       return;
     }
 
@@ -65,70 +64,11 @@ class _ResetPasswordPagetate extends State<ResetPasswordPage> {
           MaterialPageRoute(builder: (_) => const SignInPage()),
           (route) => false,
         );
-        showSuccessMessage('Successfully!');
+        showSuccessMessage(context,'Successfully!');
       });
     } else {
-      showFailMessage('Failed to change password', 'Please try again later');
+      showFailMessage(context,'Failed to change password', 'Please try again later');
     }
-  }
-
-  void showSuccessMessage(String message) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        top: 90,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 20,
-          child: SuccessSnackbar(
-            message: message,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
-  }
-
-  void showFailMessage(String errorMessage, dynamic error) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        bottom: 10,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 50, // สูงกว่า dialog
-          child: FailSnackbar(
-            title: errorMessage,
-            message: error,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
   }
 
   @override

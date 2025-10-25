@@ -4,9 +4,9 @@ import 'package:myproject/widgets/back_to_sign.dart';
 import '../widgets/background.dart';
 import '../providers/api_service.dart';
 import 'otp_page.dart';
-import '../widgets/snackbar/fail_snackbar.dart';
 import '../widgets/loading.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../providers/snackbar_helper.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -27,47 +27,12 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
     super.initState();
   }
 
-  // void _submit() async {
-  //   final email = email_controller.text.trim();
-
-  //   setState(() {
-  //     isLoading = true;
-  //     find_email = true;
-  //   });
-
-  //   try {
-  //     final success = await ApiService.sendOtp(email);
-
-  //     setState(() => isLoading = false);
-
-  //     if (success && mounted) {
-  //       Navigator.push(
-  //         context,
-  //         PageRouteBuilder(
-  //           transitionDuration: const Duration(milliseconds: 100),
-  //           pageBuilder: (_, __, ___) => OTPPage(email: email),
-  //           transitionsBuilder: (_, animation, __, child) =>
-  //               FadeTransition(opacity: animation, child: child),
-  //         ),
-  //       );
-  //     } else {
-  //       showFailMessage(
-  //         'OTP Failed',
-  //         'Email not found or OTP not sent.',
-  //       );
-  //     }
-  //   } catch (e) {
-  //     setState(() => isLoading = false);
-  //     showFailMessage('Error', 'Unexpected error occurred.');
-  //   }
-  // }
-
   void _submit() async {
     final email = email_controller.text.trim();
 
     setState(() {
       isLoading = true;
-      find_email = true; // ยังใช้ตัวแปรเดิมของคุณได้
+      find_email = true;
     });
 
     try {
@@ -84,7 +49,7 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
           isLoading = false;
           find_email = false;
         });
-        showFailMessage('Not found', 'Email not registered.');
+        showFailMessage(context,'Not found', 'Email not registered.');
         return;
       }
 
@@ -104,42 +69,12 @@ class _ForgotPasswordState extends State<ForgotPasswordPage> {
           ),
         );
       } else {
-        showFailMessage('OTP Failed', 'Could not send OTP. Please try again.');
+        showFailMessage(context,'OTP Failed', 'Could not send OTP. Please try again.');
       }
     } catch (e) {
       setState(() => isLoading = false);
-      showFailMessage('Error', 'Unexpected error occurred.');
+      showFailMessage(context,'Error', 'Unexpected error occurred.');
     }
-  }
-
-  void showFailMessage(String errorMessage, dynamic error) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        bottom: 10,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 50, // สูงกว่า dialog
-          child: FailSnackbar(
-            title: errorMessage,
-            message: error,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
   }
 
   @override

@@ -4,8 +4,8 @@ import 'package:myproject/widgets/manage_model/file_upload.dart';
 import 'package:myproject/widgets/manage_model/sticker_card.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:collection/collection.dart';
-import '../widgets/snackbar/fail_snackbar.dart';
 import '../widgets/loading.dart';
+import '../providers/snackbar_helper.dart';
 
 class ManageModels extends StatefulWidget {
   final String locationId;
@@ -80,43 +80,10 @@ class _ManageModelsState extends State<ManageModels> {
 
       await fetchStickerModels();
     } catch (e) {
-      showFailMessage('Activate Model Failed', e.toString());
+      showFailMessage(context,'Activate Model Failed', e.toString());
     } finally {
       setState(() => isLoading = false);
     }
-  }
-
-  void showFailMessage(
-    String errorMessage,
-    dynamic error,
-  ) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        bottom: 10,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 50,
-          child: FailSnackbar(
-            title: errorMessage,
-            message: error,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
   }
 
   void handleDelete(String modelId) async {

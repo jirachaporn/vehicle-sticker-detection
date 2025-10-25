@@ -68,7 +68,7 @@ class _NotificationCardState extends State<NotificationCard> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${item.timeAgo}  |  ${item.location}',
+                      item.formattedDate,
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 13,

@@ -5,9 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-
-import '../snackbar/success_snackbar.dart';
-import '../snackbar/fail_snackbar.dart';
+import '../../providers/snackbar_helper.dart';
 
 class ExcelImportDialog extends StatefulWidget {
   const ExcelImportDialog({super.key});
@@ -20,68 +18,6 @@ class _ExcelImportDialogState extends State<ExcelImportDialog> {
   bool _parsing = false;
   PlatformFile? _picked;
   List<Map<String, String>> _previewRows = [];
-
-void showFailMessage(
-    String errorMessage,
-    dynamic error,
-  ) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        bottom: 10,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 50, // สูงกว่า dialog
-          child: FailSnackbar(
-            title: errorMessage,
-            message: error,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
-  }
-
-  void showSuccessMessage(String message) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        top: 90,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 20,
-          child: SuccessSnackbar(
-            message: message,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
-  }
 
   Future<void> downloadExample() async {
     const fileName = 'Excel file format (example).xlsx';
@@ -105,11 +41,11 @@ void showFailMessage(
       if (!mounted) return;
 
       if (context.mounted) {
-        showSuccessMessage('Saved example to: ${outFile.path}');
+        showSuccessMessage(context,'Saved example to: ${outFile.path}');
       }
     } catch (e) {
       if (context.mounted) {
-        showFailMessage("Download failed", e.toString());
+        showFailMessage(context,"Download failed", e.toString());
       }
     }
   }
@@ -213,10 +149,10 @@ void showFailMessage(
       }
 
       setState(() => _previewRows = out);
-      showSuccessMessage("Import Successfully!");
+      showSuccessMessage(context,"Import Successfully!");
     } catch (e) {
       if (!mounted) return;
-      showFailMessage('Import failed', e.toString());
+      showFailMessage(context,'Import failed', e.toString());
     } finally {
       if (mounted) setState(() => _parsing = false);
     }

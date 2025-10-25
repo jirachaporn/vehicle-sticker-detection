@@ -4,8 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:archive/archive_io.dart';
-import '../snackbar/fail_snackbar.dart';
-import '../snackbar/success_snackbar.dart';
+import '../../providers/snackbar_helper.dart';
 
 class AnnotationDialog extends StatefulWidget {
   const AnnotationDialog({
@@ -88,65 +87,6 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
     }
   }
 
-  void showFailMessage(String errorMessage, dynamic error) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        bottom: 10,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 50, // สูงกว่า dialog
-          child: FailSnackbar(
-            title: errorMessage,
-            message: error,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
-  }
-
-  void showSuccessMessage(String message) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        top: 90,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 20,
-          child: SuccessSnackbar(
-            message: message,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
-  }
-
   Widget _statusDropdown() {
     final (bg, fg, border) = _statusColors(status);
     return Container(
@@ -207,7 +147,7 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
 
     if (f.bytes == null) {
       if (!mounted) return;
-      showFailMessage("File data not found", "Please select again");
+      showFailMessage(context,"File data not found", "Please select again");
       debugPrint("❌ File.bytes is null");
       return;
     }
@@ -215,7 +155,7 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
     // (ออปชัน) จำกัด 50MB ตาม UI
     const maxBytes = 50 * 1024 * 1024;
     if (f.size > maxBytes) {
-      showFailMessage("File too large", "Please select a file up to 50MB");
+      showFailMessage(context,"File too large", "Please select a file up to 50MB");
       debugPrint("❌ File too large: ${f.size} bytes");
       return;
     }
@@ -260,10 +200,10 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
         uploadedSize = f.size;
         clearedModelUrl = false; // มีไฟล์ใหม่ ไม่ต้องเคลียร์
       });
-      showSuccessMessage("Upload success");
+      showSuccessMessage(context,"Upload success");
     } catch (e, st) {
       if (!mounted) return;
-      showFailMessage("Upload failed", e.toString());
+      showFailMessage(context,"Upload failed", e.toString());
       debugPrint("❌ Upload failed: $e");
       debugPrint("Stacktrace: $st");
     } finally {
@@ -337,7 +277,7 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
 
     if (!mounted) return;
     setState(() => downloading = false);
-    showSuccessMessage('Saved as ${outFile.path}');
+    showSuccessMessage(context,'Saved as ${outFile.path}');
   }
 
   Future<void> save() async {
@@ -371,10 +311,10 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
-      showSuccessMessage("Save successful");
+      showSuccessMessage(context,"Save successful");
     } catch (e, st) {
       if (!mounted) return;
-      showFailMessage("Save failed", e.toString());
+      showFailMessage(context,"Save failed", e.toString());
       debugPrint("❌ Save failed: $e");
       debugPrint("Stacktrace: $st");
     } finally {
@@ -384,7 +324,6 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final thumbs = widget.imageUrls.take(5).toList();
     final created = widget.createdAt != null
         ? '${widget.createdAt!.day}/${widget.createdAt!.month}/${widget.createdAt!.year}'
         : '-';
@@ -416,7 +355,6 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
               ),
               const SizedBox(height: 16),
 
-              // แถวชื่อโมเดล + สถานะ (แบบ badge dropdown)
               Row(
                 children: [
                   Expanded(
@@ -435,42 +373,14 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
                   _statusDropdown(),
                 ],
               ),
-              const SizedBox(height: 10),
 
-              // พรีวิวรูป
-              if (thumbs.isNotEmpty)
-                SizedBox(
-                  height: 86,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: thumbs.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) => ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        width: 120,
-                        height: 86,
-                        color: const Color(0xFFE6E6E6),
-                        child: Image.network(
-                          thumbs[i],
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Center(
-                            child: Icon(Icons.image_not_supported_outlined),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
               Align(
                 alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
+                child: Text(
                     'Uploaded: $created',
                     style: const TextStyle(fontSize: 12, color: Colors.black54),
                   ),
-                ),
+                
               ),
               const SizedBox(height: 16),
 

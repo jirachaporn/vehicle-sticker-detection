@@ -173,6 +173,24 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>?> fetchOverviewData(String locationId) async {
+    final url = Uri.parse('$baseUrl/overview/$locationId');
+
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        return data;
+      } else {
+        throw Exception('Failed to load overview data');
+      }
+    } catch (error) {
+      debugPrint('Error fetching overview data: $error');
+      return null;
+    }
+  }
+
   // ---------- Detection (instance) ----------
   Future<void> detectHeartbeat() async {
     // ส่งภาพ/คำสั่งตรวจจับแบบ manual ถ้าเพิ่ม endpoint ภายหลัง

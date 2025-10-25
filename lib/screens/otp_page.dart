@@ -7,7 +7,7 @@ import 'package:myproject/widgets/loading.dart';
 import '../widgets/background.dart';
 import 'reset_password.dart';
 import '../providers/api_service.dart';
-import '../widgets/snackbar/fail_snackbar.dart';
+import '../providers/snackbar_helper.dart';
 
 class OTPPage extends StatefulWidget {
   final String email;
@@ -153,10 +153,10 @@ class _OTPPageState extends State<OTPPage> {
         startResendCooldown();
         FocusScope.of(context).requestFocus(focusNodes[0]);
       } else {
-        showFailMessage('Error', 'Failed to resend the code.');
+        showFailMessage(context,'Error', 'Failed to resend the code.');
       }
     } catch (e) {
-      if (mounted) showFailMessage('Error', 'Unexpected error occurred');
+      if (mounted) showFailMessage(context,'Error', 'Unexpected error occurred');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -199,43 +199,15 @@ class _OTPPageState extends State<OTPPage> {
         }
       } else {
         setState(() => isOtpIncorrect = true);
-        showFailMessage('OTP Failed', 'Invalid or expired OTP.');
+        showFailMessage(context,'OTP Failed', 'Invalid or expired OTP.');
       }
     } catch (e) {
-      showFailMessage('Error', 'Verification failed');
+      showFailMessage(context,'Error', 'Verification failed');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
   }
 
-  void showFailMessage(String errorMessage, dynamic error) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        bottom: 10,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 20,
-          child: FailSnackbar(
-            title: errorMessage,
-            message: error,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
-  }
 
   // ===== Widget หลัก =====
   @override

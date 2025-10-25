@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class NotificationItem {
   final String id;
@@ -10,6 +11,7 @@ class NotificationItem {
   final String imageUrl;
   final bool isRead;
   final String status;
+  final Map<String, dynamic> meta;
 
   NotificationItem({
     required this.id,
@@ -21,12 +23,24 @@ class NotificationItem {
     required this.imageUrl,
     required this.isRead,
     required this.status,
+    required this.meta,
   });
 
   bool get unread => !isRead;
   String get description => message;
   String get timeAgo => createdAt.isNotEmpty ? createdAt : 'Just now';
   String get location => locationId;
+
+  // yyyy-mm-dd hh:mm:ss
+  String get formattedDate {
+    try {
+      final dateTime = DateTime.parse(createdAt);
+      final localTime = dateTime.toLocal();
+      return DateFormat('yyyy-MM-dd HH:mm:ss').format(localTime);
+    } catch (e) {
+      return 'Invalid date';
+    }
+  }
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
     return NotificationItem(
@@ -39,6 +53,9 @@ class NotificationItem {
       imageUrl: (json['image_url'] ?? '').replaceAll('"', ''),
       isRead: json['is_read'] ?? false,
       status: json['notification_status'] ?? '',
+      meta: json['meta'] != null
+          ? Map<String, dynamic>.from(json['meta'])
+          : {},
     );
   }
 
@@ -75,7 +92,8 @@ class NotificationItem {
     String? imageUrl,
     bool? isRead,
     String? status,
-  }) { 
+    Map<String, dynamic>? meta,
+  }) {
     return NotificationItem(
       id: id ?? this.id,
       title: title ?? this.title,
@@ -86,6 +104,7 @@ class NotificationItem {
       imageUrl: imageUrl ?? this.imageUrl,
       isRead: isRead ?? this.isRead,
       status: status ?? this.status,
+      meta: meta ?? this.meta,
     );
   }
 }

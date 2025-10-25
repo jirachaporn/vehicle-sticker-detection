@@ -37,22 +37,15 @@ class _MainPageState extends State<MainPage> {
   @override
   void initState() {
     super.initState();
-    // ให้ทุกอย่างโหลดหลังเฟรมแรก (context อยู่ใต้ MultiProvider แน่ๆ)
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-
-      // เก็บ reference ของ providers ก่อน async
       final appState = context.read<AppState>();
 
       try {
-        // โหลดรายการ location ที่ user มีสิทธิ์
         await appState.loadLocations(widget.email);
 
-        // หาก mounted ยังคงเป็น true และมี location ให้โหลดสมาชิกของ location แรก
         if (mounted && appState.locations.isNotEmpty) {
           final permissionProvider = context.read<PermissionProvider>();
-          // โหลดสมาชิกของ location แรกเป็นตัวอย่าง
-          // หรือจะโหลดทุก location ก็ได้
           await permissionProvider.loadMembers(appState.locations.first.id);
         }
       } catch (e) {
@@ -139,6 +132,7 @@ class _MainPageState extends State<MainPage> {
                       case AppView.notification:
                         return NotificationPage(
                           locationId: appState.locationId ?? '',
+                          locationName: location.name,
                         );
                       case AppView.table:
                         return DataTablePage(

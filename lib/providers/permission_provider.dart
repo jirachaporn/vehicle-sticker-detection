@@ -8,17 +8,14 @@ class PermissionProvider with ChangeNotifier {
 
   String get currentEmail {
     final e = (supa.auth.currentUser?.email ?? '').toLowerCase();
-    return e.isNotEmpty ? e : 'vdowduang@gmail.com'; // DEV fallback
+    return e.isNotEmpty ? e : 'vdowduang@gmail.com'; 
   }
 
-  // ===== Cache =====
   final Map<String, List<PermissionMember>> cacheByLocation = {};
   List<PermissionMember> membersFor(String locationId) =>
       cacheByLocation[locationId] ?? [];
 
   String toDbPermission(PermissionType t) => t.dbValue;
-
-  // ===== Permission checks =====
   bool isOwner(String locationId) => membersFor(
     locationId,
   ).any((m) => m.email == currentEmail && m.permission == PermissionType.owner);
@@ -43,7 +40,6 @@ class PermissionProvider with ChangeNotifier {
       )
       .permission;
 
-  // ===== Data ops =====
   Future<List<PermissionMember>> loadMembers(String locationId) async {
     try {
       final res = await supa

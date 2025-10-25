@@ -8,11 +8,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers/app_state.dart';
 import '../widgets/background.dart';
-import '../widgets/snackbar/fail_snackbar.dart';
-import '../widgets/snackbar/success_snackbar.dart';
 import 'forgot_password_page.dart';
 import 'sign_up_page.dart';
 import 'main_page.dart';
+import '../providers/snackbar_helper.dart';
 
 class SignInPage extends StatefulWidget {
   const SignInPage({super.key});
@@ -35,72 +34,13 @@ class _SignInPageState extends State<SignInPage> {
     setState(() => _obscureText = !_obscureText);
   }
 
-  void showFailMessage(String errorMessage, dynamic error) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        bottom: 10,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 50, // สูงกว่า dialog
-          child: FailSnackbar(
-            title: errorMessage,
-            message: error,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
-  }
-
-  void showSuccessMessage(String message) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        top: 90,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 20,
-          child: SuccessSnackbar(
-            message: message,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
-  }
-
   Future<void> handleLogin() async {
     final supabase = Supabase.instance.client;
     final email = _usernameOrEmailController.text.trim().toLowerCase();
     final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
-      showFailMessage('Error', 'Please fill in all required fields.');
+      showFailMessage(context,'Error', 'Please fill in all required fields.');
       return;
     }
 
@@ -115,12 +55,12 @@ class _SignInPageState extends State<SignInPage> {
 
       debugPrint('authUser: ${authUser.toString()}');
       if (authUser == null) {
-        showFailMessage('Login Failed', 'Email or password is incorrect.');
+        showFailMessage(context,'Login Failed', 'Email or password is incorrect.');
         return;
       }
       final passwordHash = sha256.convert(utf8.encode(password)).toString();
       if (passwordHash != (authUser['password_hash'] as String)) {
-        showFailMessage('Login Failed', 'Email or password is incorrect.');
+        showFailMessage(context,'Login Failed', 'Email or password is incorrect.');
         return;
       }
 
@@ -140,7 +80,7 @@ class _SignInPageState extends State<SignInPage> {
       final colorHex =
           (userProfile?['color_profile'] as String?)?.trim() ?? '#3254D0';
 
-      showSuccessMessage('Welcome $userName!');
+      showSuccessMessage(context,'Welcome $userName!');
       if (!mounted) return;
 
       context.read<AppState>().setLoggedInEmail(email);
@@ -154,7 +94,7 @@ class _SignInPageState extends State<SignInPage> {
       );
     } catch (e) {
       debugPrint('Login error: $e');
-      showFailMessage('Unexpected Error', 'Something went wrong.');
+      showFailMessage(context,'Unexpected Error', 'Something went wrong.');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }

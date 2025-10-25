@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/permission_provider.dart';
 import '../../models/permission.dart';
-import '../snackbar/fail_snackbar.dart';
-import '../snackbar/success_snackbar.dart';
+import '../../providers/snackbar_helper.dart';
 
 class MembersTab extends StatefulWidget {
   final String locationId;
@@ -24,59 +23,6 @@ class _MembersTabState extends State<MembersTab> {
   void initState() {
     super.initState();
     future = context.read<PermissionProvider>().loadMembers(widget.locationId);
-  }
-
-  void showSuccessMessage(String message) {
-    final overlay = Navigator.of(context, rootNavigator: true).overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        top: 90,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 20,
-          child: SuccessSnackbar(
-            message: message,
-            onClose: () => entry.remove(),
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
-  }
-
-  void showFailMessage(String title, dynamic message) {
-    final overlay = Navigator.of(context, rootNavigator: true).overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        bottom: 10,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 50,
-          child: FailSnackbar(
-            title: title,
-            message: message,
-            onClose: () => entry.remove(),
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
   }
 
   Future<void> refresh() async {
@@ -295,12 +241,12 @@ class _MembersTabState extends State<MembersTab> {
                                       );
                                       if (!mounted) return;
                                       showSuccessMessage(
-                                        'Permissions updated successfully',
+                                        context,'Permissions updated successfully',
                                       );
                                       await refresh();
                                     } catch (e) {
                                       if (!mounted) return;
-                                      showFailMessage('Error', e);
+                                      showFailMessage(context,'Error', e);
                                     }
                                   },
                                   validator: (_) => null,
@@ -317,22 +263,14 @@ class _MembersTabState extends State<MembersTab> {
                                     newPermission: m.permission,
                                   );
 
-                                  // await provider.upsertMember(
-                                  //   locationId: widget.locationId,
-                                  //   email: m.email,
-                                  //   name: m.name,
-                                  //   permission: m.permission,
-                                  //   status: MemberStatus.revoked,
-                                  // );
-
                                   if (!mounted) return;
                                   showSuccessMessage(
-                                    'Member disabled and logged',
+                                    context,'Member disabled and logged',
                                   );
                                   await refresh();
                                 } catch (e) {
                                   if (!mounted) return;
-                                  showFailMessage('Error', e);
+                                  showFailMessage(context,'Error', e);
                                 }
                               }),
                           ],

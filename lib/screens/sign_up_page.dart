@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'package:crypto/crypto.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:myproject/widgets/snackbar/fail_snackbar.dart';
-import 'package:myproject/widgets/snackbar/success_snackbar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:myproject/models/user_str.dart';
 import 'package:myproject/screens/sign_in_page.dart';
@@ -13,6 +11,7 @@ import 'package:myproject/widgets/back_to_sign.dart';
 import '../widgets/background.dart';
 import 'otp_page.dart';
 import '../providers/api_service.dart';
+import '../providers/snackbar_helper.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -73,14 +72,14 @@ class _SignUpPageState extends State<SignUpPage> {
       // เช็คอีเมลซ้ำ
       await checkEmailExists(email);
       if (isEmailTaken) {
-        showFailMessage('Email Error', 'Email already registered');
+        showFailMessage(context,'Email Error', 'Email already registered');
         return;
       }
 
       // ส่ง OTP
       final otpRes = await ApiService.sendSignupOtp(email);
       if (otpRes['success'] != true) {
-        showFailMessage('OTP Error', otpRes['message'] ?? 'Failed to send OTP');
+        showFailMessage(context,'OTP Error', otpRes['message'] ?? 'Failed to send OTP');
         return;
       }
 
@@ -123,70 +122,10 @@ class _SignUpPageState extends State<SignUpPage> {
       );
     } catch (e) {
       debugPrint('❌ Signup failed: $e');
-      showFailMessage('Signup Failed', 'Please try to sign up again.');
+      showFailMessage(context,'Signup Failed', 'Please try to sign up again.');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
-  }
-
-  // --- Snackbars -------------------------------------------------------------
-  void showFailMessage(String errorMessage, dynamic error) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        bottom: 10,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 50, // สูงกว่า dialog
-          child: FailSnackbar(
-            title: errorMessage,
-            message: error,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
-  }
-
-  void showSuccessMessage(String message) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        top: 90,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 20,
-          child: SuccessSnackbar(
-            message: message,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
   }
 
   // --- UI --------------------------------------------------------------------

@@ -2,8 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/location.dart';
-import '../snackbar/fail_snackbar.dart';
-import '../snackbar/success_snackbar.dart';
 import 'package:uuid/uuid.dart';
 import 'add_license_dialog.dart';
 
@@ -109,55 +107,6 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
     _addressController.dispose();
     _descriptionController.dispose();
     super.dispose();
-  }
-
-  void showFailMessage(String errorMessage, dynamic error) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        elevation: 20,
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Colors.transparent,
-        duration: const Duration(seconds: 3),
-        padding: EdgeInsets.zero,
-        content: Align(
-          alignment: Alignment.topRight,
-          child: FailSnackbar(
-            title: errorMessage,
-            message: error,
-            onClose: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void showSuccessMessage(String message) {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final overlay = nav.overlay;
-    if (overlay == null) return;
-
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (_) => Positioned(
-        top: 90,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          elevation: 20,
-          child: SuccessSnackbar(
-            message: message,
-            onClose: () {
-              if (entry.mounted) entry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 3)).then((_) {
-      if (entry.mounted) entry.remove();
-    });
   }
 
   @override

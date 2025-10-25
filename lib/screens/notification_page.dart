@@ -7,7 +7,12 @@ import '../widgets/notification_dialogs/notification_card.dart';
 
 class NotificationPage extends StatefulWidget {
   final String locationId;
-  const NotificationPage({super.key, required this.locationId});
+  final String? locationName;
+  const NotificationPage({
+    super.key,
+    required this.locationId,
+    required this.locationName,
+  });
 
   @override
   State<NotificationPage> createState() => _NotificationPageState();
@@ -54,7 +59,7 @@ class _NotificationPageState extends State<NotificationPage> {
     }
   }
 
-  void showDeleteDialog(NotificationItem item) {
+  void showDeleteDialog(NotificationItem item, locationName) {
     showDialog(
       context: context,
       builder: (_) => DeleteConfirmationDialog(
@@ -83,18 +88,20 @@ class _NotificationPageState extends State<NotificationPage> {
       } catch (e) {
         debugPrint("Error marking notification as read: $e");
       }
+      debugPrint(item.timeAgo);
     }
 
     await showDialog(
       context: context,
-      builder: (_) => DetailsDialog(item: item),
+      builder: (_) =>
+          DetailsDialog(item: item, locationName: widget.locationName),
     );
   }
 
   Widget buildNotificationCard(NotificationItem item) {
     return NotificationCard(
       item: item,
-      onDelete: () => showDeleteDialog(item),
+      onDelete: () => showDeleteDialog(item, widget.locationName),
       onTap: () => showDetailsDialog(item),
     );
   }
@@ -103,9 +110,7 @@ class _NotificationPageState extends State<NotificationPage> {
   Widget build(BuildContext context) {
     if (isLoading) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFF2563EB), 
-        ),
+        child: CircularProgressIndicator(color: Color(0xFF2563EB)),
       );
     }
 

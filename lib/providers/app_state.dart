@@ -20,17 +20,12 @@ enum AppView {
 }
 
 class AppState extends ChangeNotifier {
-  // ====== State เดิม (คงโครงเดิมทั้งหมด) ======
   AppView _currentView = AppView.home;
   Location? _selectedLocation;
   List<Location> _locations = [];
-
-  // NOTE: dev only (อย่าลืมลบเมื่อขึ้น prod)
   String loggedInEmail = 'vdowduang@gmail.com';
-
-  /// ใช้คู่กับ PermissionProvider เพื่อเช็คสิทธิ์
   String? locationId;
-
+  bool isAdmin = false;
   AppView get currentView => _currentView;
   Location? get selectedLocation => _selectedLocation;
   List<Location> get locations => _locations;
@@ -41,7 +36,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// โหลดรายการสถานที่ที่ผู้ใช้งาน “มีสิทธิ์” จาก backend (ผ่าน location_members)
   Future<void> loadLocations(String email) async {
     final response = await http.get(
       Uri.parse('$baseUrl/get_locations?user=$email'),
@@ -68,10 +62,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// เลือกการ์ดสถานที่จากหน้า Home
   void selectLocation(Location location) {
     _selectedLocation = location;
-    locationId = location.id; // ✅ ผูกกับ id สำหรับ PermissionProvider
+    locationId = location.id;
     _currentView = AppView.overview;
     notifyListeners();
   }
@@ -88,10 +81,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ====== เพิ่ม: Admin Role ======
-  bool isAdmin = false;
-
-  /// เรียกหลังล็อกอินสำเร็จเสมอ
   Future<void> loadMyRole() async {
     isAdmin = false;
     final supa = Supabase.instance.client;
@@ -122,29 +111,27 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ====== เช็คสิทธิ์ (คงพฤติกรรมเดิม + ให้ admin ผ่านทุกอย่าง) ======
   bool isOwnerWith(PermissionProvider perm) {
-    if (isAdmin) return true; // ✅ admin ผ่าน
+    if (isAdmin) return true;
     final id = locationId;
     if (id == null || id.isEmpty) return false;
     return perm.isOwner(id);
   }
 
   bool canEditWith(PermissionProvider perm) {
-    if (isAdmin) return true; // ✅ admin ผ่าน
+    if (isAdmin) return true;
     final id = locationId;
     if (id == null || id.isEmpty) return false;
     return perm.canEdit(id);
   }
 
   bool canViewWith(PermissionProvider perm) {
-    if (isAdmin) return true; // ✅ admin ผ่าน
+    if (isAdmin) return true;
     final id = locationId;
     if (id == null || id.isEmpty) return false;
     return perm.canView(id);
   }
 
-  // (ออปชัน) ใช้กับปุ่ม Sign out ถ้ามี
   Future<void> signOutAndReset() async {
     try {
       await Supabase.instance.client.auth.signOut();
