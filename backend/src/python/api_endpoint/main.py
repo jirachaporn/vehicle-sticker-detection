@@ -6,9 +6,8 @@ from .routes_overview import router as overview_router
 from .detection import router as detection_router
 from .routes_notifications import router as notifications_router
 from .routes_table import router as table_router
-
-# add more
-from fastapi.middleware.cors import CORSMiddleware
+from .routes_models import router as models_router
+from .routes_notifications_permission import router as permissions_router
 
 
 APP_ENV = os.getenv("APP_ENV", "Development for Programer").lower()
@@ -22,7 +21,8 @@ app.include_router(overview_router, tags=["overview"])
 app.include_router(detection_router, tags=["detection"])
 app.include_router(notifications_router, tags=["notifications"])
 app.include_router(table_router, prefix="/table", tags=["table"])
-
+app.include_router(models_router, tags=["models"])
+app.include_router(permissions_router, tags=["permissions"])
 
 @app.get("/")
 def root():

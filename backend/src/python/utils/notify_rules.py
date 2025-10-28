@@ -16,16 +16,16 @@ def classify_notification(
     detection_row: Dict,*,
     is_registered: Optional[bool] = None,
     location_license: Optional[str] = None,
-    registration: Optional[Dict] = None, 
+    registration: Optional[Dict] = None
 ) -> Optional[Dict]:
     """
-    รับแถว detections + ผลตรวจสิทธิ์ แล้วคืนพารามิเตอร์สำหรับ insert ลง notifications
-    ตาม 4 Scenario:
+    รับแถว detections + ผลตรวจสติกเกอร์ แล้วคืนพารามิเตอร์เพื่อ insert ลง ตาราง notifications
+    ### 4 Scenario:
     1) Vehicle YES + Sticker YES + Registered(TRUE)   -> Authorized (info)
     2) Vehicle YES + Sticker YES + Registered(FALSE)  -> Unauthorized (warning)
     3) Vehicle NO/unknown + Sticker YES               -> Suspicious (warning)
     4) Vehicle NO/unknown + Sticker NO                -> Abnormal/Critical (critical)
-    หมายเหตุ: หาก Vehicle YES + Sticker NO (เผื่อกรณีจริง) จะถือเป็น Unauthorized (warning)
+    หมายเหตุ: หาก Vehicle YES + Sticker NO จะถือเป็น Unauthorized (warning)
     """
     dp = detection_row.get("detected_plate") or {}
     is_sticker = bool(detection_row.get("is_sticker"))
@@ -85,7 +85,7 @@ def classify_notification(
             "meta": {**base_meta, "reason_codes": ["STICKER_ONLY_NO_VEHICLE_OR_PLATE"]}
         }
 
-    # (กรณีจริง: Vehicle YES + Sticker NO → ไม่อยู่ใน 4 scenario ใหม่ แต่เพื่อความปลอดภัยให้จัดเป็น Unauthorized)
+    # (กรณีจริง: Vehicle YES + Sticker NO ไม่อยู่ใน 4 scenario )
     if is_vehicle == "yes" and not is_sticker:
         return {
             "title": "Unauthorized: Vehicle Without Sticker",

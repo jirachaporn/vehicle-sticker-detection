@@ -1,4 +1,4 @@
-# api_endpoint/detection.py
+# src/python/api_endpoint/detection.py
 from fastapi import APIRouter, File, UploadFile, HTTPException, Form
 from typing import Literal
 from ..utils.cloudinary_uploader import CloudinaryUploader

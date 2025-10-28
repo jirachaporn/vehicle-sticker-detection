@@ -28,9 +28,7 @@ def recognize_license_plate(image_url: str) -> Optional[Dict[str, Any]]:
     if not API_KEY_MAIN or not URL:
         logger.error("API_KEY_MAIN or URL is missing in .env.")
         return None
-
     headers = {'apikey': API_KEY_MAIN}
-
     try:
         response_img = requests.get(image_url)
         response_img.raise_for_status() 
