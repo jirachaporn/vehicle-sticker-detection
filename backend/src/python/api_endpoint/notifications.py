@@ -13,15 +13,10 @@ def list_notifications(
     location_id: str,
     status: str = Query("all", pattern="^(all|new)$"),
     limit: int = Query(50, ge=1, le=200),
-    before: Optional[str] = None, 
-) -> List[Dict[str, Any]]:
+    before: Optional[str] = None) -> List[Dict[str, Any]]:
     sb = get_supabase_anon() 
-    q = (sb.table("notifications")
-        .select("*")
-        .eq("location_id", location_id)
-        .is_("dismissed_at", None)
-        .order("created_at", desc=True)
-        .limit(limit))
+    q = (sb.table("notifications").select("*").eq("location_id", location_id)
+        .is_("dismissed_at", None).order("created_at", desc=True).limit(limit))
     if status == "new":
         q = q.eq("is_read", False)
     if before:
@@ -46,10 +41,9 @@ def unread_count(location_id: str) -> Dict[str, int]:
 @router.patch("/{notif_id}/read")
 def mark_read(notif_id: str) -> Dict[str, Any]:
     sb = get_supabase_service()  # bypass RLS
-    res = (sb.table("notifications")
-            .update({"is_read": True, "read_at": utc_now_iso()})
-            .eq("id", notif_id)
-            .execute())
+    res = (sb.table("notifications").update({"is_read": True, "read_at": utc_now_iso()})
+        .eq("id", notif_id)
+        .execute())
     rows = getattr(res, "data", res) or []
     if not rows:
         raise HTTPException(404, "Notification not found")

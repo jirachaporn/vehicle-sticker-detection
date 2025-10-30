@@ -1,4 +1,4 @@
-# api_endpoint/routes_notifications.py API สำหรับหน้า Notification Page
+# src/python/api_endpoint/routes_notifications.py API สำหรับหน้า Notification Page
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from typing import Optional, Literal
@@ -17,8 +17,7 @@ def get_notifications(
     status: Literal["new", "read", "dismissed", "all"] = Query("new"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    severity: Optional[Literal["info","warning","critical"]] = None,
-):
+    severity: Optional[Literal["info","warning","critical"]] = None):
     return list_notifications(location_id, status, limit, offset, severity)
 
 @router.get("/summary")

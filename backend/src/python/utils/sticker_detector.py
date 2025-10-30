@@ -10,7 +10,7 @@ _LOCK = threading.Lock()
 _DETECTOR = None  # singleton  
 
 class StickerDetector:
-    def __init__(self, model_path: str, conf: float = 0.30, iou: float = 0.50):
+    def __init__(self, model_path: str, conf: float = 0.50, iou: float = 0.50):
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Sticker model not found: {model_path}")
         self.model = YOLO(model_path)
@@ -50,7 +50,7 @@ def get_sticker_detector() -> StickerDetector:
         with _LOCK:
             if _DETECTOR is None:
                 model_path = os.getenv("STICKER_MODEL_PATH", "sc9_sticker.pt")
-                conf = float(os.getenv("STICKER_CONF", "0.30"))
+                conf = float(os.getenv("STICKER_CONF", "0.50"))
                 iou = float(os.getenv("STICKER_IOU", "0.50"))
                 _DETECTOR = StickerDetector(model_path, conf=conf, iou=iou)
     return _DETECTOR
