@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../widgets/overview/overview_row.dart';        // Import overview row widgets
-import '../widgets/overview/overview_chart.dart';      // Import chart-related widgets
-import '../widgets/overview/overview_bottom_charts.dart'; // Import bottom charts row widgets
+import '../widgets/overview/overview_row.dart';
+import '../widgets/overview/overview_chart.dart';
+import '../widgets/overview/overview_bottom_charts.dart';
 import '../providers/api_service.dart';
 
 class OverviewPage extends StatefulWidget {
@@ -26,6 +26,8 @@ class _OverviewPageState extends State<OverviewPage> {
   Future<void> fetchOverviewData() async {
     try {
       final data = await api.fetchOverviewData(widget.locationId);
+      if (!mounted) return;
+
       if (data != null) {
         setState(() {
           stats = data;
@@ -38,6 +40,7 @@ class _OverviewPageState extends State<OverviewPage> {
       }
     } catch (e) {
       debugPrint("⚠️ Error loading overview data: $e");
+      if (!mounted) return;
       setState(() {
         isLoading = false;
       });
@@ -77,9 +80,9 @@ class _OverviewPageState extends State<OverviewPage> {
                 child: Text('No data available'),
               )
             else ...[
-              OverviewRow(stats),     
+              OverviewRow(stats),
               const SizedBox(height: 16),
-              ChartsRow(stats), 
+              ChartsRow(stats),
               const SizedBox(height: 16),
               BottomChartsRow(stats),
             ],

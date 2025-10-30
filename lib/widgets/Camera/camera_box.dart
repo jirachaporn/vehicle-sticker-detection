@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import '../../providers/api_service.dart';
@@ -26,54 +26,62 @@ class CameraFeedBox extends StatefulWidget {
 }
 
 class _CameraFeedBoxState extends State<CameraFeedBox> {
-  CameraController? _controller;
-  bool _isDetecting = false;
-  Map<String, dynamic>? _detectionResult;
+  CameraController? controller;
+  bool isDetecting = false;
+  Map<String, dynamic>? detectionResult;
+  Timer? snapshotTimer;
 
   @override
   void initState() {
     super.initState();
-    _initializeCamera();
+    initializeCamera();
   }
 
-  Future<void> _initializeCamera() async {
+  Future<void> initializeCamera() async {
     try {
-      _controller = CameraController(
+      // ถ้ามี controller เก่า ให้ dispose ก่อน
+      if (controller != null) {
+        await controller!.dispose();
+        controller = null;
+      }
+
+      controller = CameraController(
         widget.camera,
         ResolutionPreset.medium,
         enableAudio: false,
       );
 
-      await _controller!.initialize();
+      await controller!.initialize();
+      if (!controller!.value.isInitialized) return;
 
-      if (!_controller!.value.isInitialized) return;
+      // ใช้ snapshot แทน imageStream สำหรับ Windows
+      snapshotTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+        if (isDetecting ||
+            controller == null ||
+            !controller!.value.isInitialized) {
+          return;
+        }
 
-      // เริ่ม ImageStream สำหรับตรวจจับแบบ realtime
-      _controller!.startImageStream((image) async {
-        if (!_isDetecting) {
-          _isDetecting = true;
+        isDetecting = true;
+        try {
+          final file = await controller!.takePicture();
+          final bytes = await file.readAsBytes();
 
-          try {
-            Uint8List jpegBytes = ApiService.convertYUV420ToJpeg(image);
+          final result = await ApiService.detectVehicleFrom(
+            bytes,
+            locationId: widget.locationId,
+            modelId: widget.modelId,
+            direction: widget.direction,
+          );
 
-            // เรียก API ส่งไป backend
-            var result = await ApiService.detectVehicleFrom(
-              jpegBytes,
-              locationId: widget.locationId,
-              modelId: widget.modelId,
-              direction: widget.direction,
-            );
-
-            if (mounted) {
-              setState(() {
-                _detectionResult = result;
-              });
-            }
-          } catch (e) {
-            debugPrint('Error detecting vehicle: $e');
-          } finally {
-            _isDetecting = false;
-          }
+          if (!mounted) return;
+          setState(() {
+            detectionResult = result;
+          });
+        } catch (e) {
+          debugPrint('Error detecting vehicle: $e');
+        } finally {
+          isDetecting = false;
         }
       });
 
@@ -85,7 +93,9 @@ class _CameraFeedBoxState extends State<CameraFeedBox> {
 
   @override
   void dispose() {
-    _controller?.dispose();
+    snapshotTimer?.cancel();
+    controller?.dispose();
+    controller = null;
     super.dispose();
   }
 
@@ -121,7 +131,7 @@ class _CameraFeedBoxState extends State<CameraFeedBox> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.videocam, color: Colors.blue),
+                    const Icon(Icons.videocam, color: Color(0xFF119928)),
                     const SizedBox(width: 8),
                     Text(
                       widget.title,
@@ -133,17 +143,6 @@ class _CameraFeedBoxState extends State<CameraFeedBox> {
                     const Spacer(),
                   ],
                 ),
-                if (_detectionResult != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      'Detected: ${_detectionResult!['count']} vehicles',
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
@@ -163,11 +162,11 @@ class _CameraFeedBoxState extends State<CameraFeedBox> {
                 bottomLeft: Radius.circular(12),
                 bottomRight: Radius.circular(12),
               ),
-              child: _controller == null || !_controller!.value.isInitialized
+              child: controller == null || !controller!.value.isInitialized
                   ? const Center(
                       child: CircularProgressIndicator(color: Colors.white),
                     )
-                  : CameraPreview(_controller!),
+                  : CameraPreview(controller!),
             ),
           ),
         ],

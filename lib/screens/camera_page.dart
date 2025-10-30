@@ -1,8 +1,8 @@
-// camera_page.dart
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'dart:async';
+import 'package:provider/provider.dart';
 import '../widgets/Camera/camera_box.dart';
+import '../providers/app_state.dart';
 
 class CameraPage extends StatefulWidget {
   final String locationId;
@@ -16,15 +16,25 @@ class _CameraPageState extends State<CameraPage> {
   List<CameraDescription> cameras = [];
   String warning = '';
   bool loading = true;
+  String? modelId;  // Store modelId here
 
   @override
   void initState() {
     super.initState();
+    loadModelId();
     loadCameras();
   }
 
+  Future<void> loadModelId() async {
+    final appState = context.read<AppState>(); 
+    modelId = appState.getActiveModelFor(widget.locationId);
+    setState(() {});
+  }
+
   Future<void> loadCameras() async {
+    if (cameras.isNotEmpty) return;
     setState(() => loading = true);
+
     try {
       final cams = await availableCameras();
       debugPrint('Found ${cams.length} cameras');
@@ -38,17 +48,11 @@ class _CameraPageState extends State<CameraPage> {
         return;
       }
 
-      List<CameraDescription> validCameras = cams.length > 2
-          ? cams.sublist(0, 2)
-          : cams;
-
-      setState(() {
-        cameras = validCameras;
-        warning = cams.length > 2
-            ? 'If more than 2 cameras are found, only the first 2 will be displayed.'
-            : '';
-        loading = false;
-      });
+      cameras = cams.length > 2 ? cams.sublist(0, 2) : cams;
+      warning = cams.length > 2
+          ? 'If more than 2 cameras are found, only the first 2 will be displayed.'
+          : '';
+      setState(() => loading = false);
     } catch (e) {
       debugPrint('Error loading cameras: $e');
       setState(() {
@@ -61,6 +65,11 @@ class _CameraPageState extends State<CameraPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Show a loading indicator until modelId is loaded
+    if (modelId == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return Padding(
       padding: const EdgeInsets.all(30),
       child: SingleChildScrollView(
@@ -102,7 +111,10 @@ class _CameraPageState extends State<CameraPage> {
                 CameraFeedBox(
                   title: "Camera ${i + 1}",
                   camera: cameras[i],
-                  cameraIndex: i, locationId: '', modelId: '', direction: '',
+                  cameraIndex: i,
+                  locationId: widget.locationId,
+                  modelId: modelId ?? '',
+                  direction: '',
                 ),
                 const SizedBox(height: 20),
               ],
@@ -125,4 +137,3 @@ class _CameraPageState extends State<CameraPage> {
     );
   }
 }
-

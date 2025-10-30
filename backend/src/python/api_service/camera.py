@@ -1,15 +1,18 @@
 # api_service/camera.py
 import os
-import base64
 import cv2
 import numpy as np
 from dotenv import load_dotenv
 from ultralytics import YOLO
+from fastapi import UploadFile
+from PIL import Image
+import io
 
 # โหลดตัวแปรจาก .env
 load_dotenv()
 
 MODEL_PATH = os.getenv("CET_DETECTION_PATH")
+CAMERAS = {}
 
 # โหลดโมเดล YOLO สำหรับ /car-detect
 model = None
@@ -20,36 +23,51 @@ if MODEL_PATH and os.path.exists(MODEL_PATH):
 else:
     print("⚠️ Model path not found or invalid:", MODEL_PATH)
 
-def detect_vehicle(image_base64: str):
-    """ตรวจจับยานพาหนะจาก base64"""
+
+async def detect_vehicle(file: UploadFile):
+    """ตรวจจับยานพาหนะจากไฟล์ภาพ UploadFile"""
     if not model:
         raise RuntimeError("YOLO model not loaded")
 
-    image_data = base64.b64decode(image_base64.split(",")[1] if "," in image_base64 else image_base64)
-    nparr = np.frombuffer(image_data, np.uint8)
-    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    print(f"🚗 [detect_vehicle] รับภาพมาจาก Flutter แล้ว: {file.filename}")
 
-    results = model(image, conf=0.5)
+    # อ่านภาพจาก UploadFile
+    image_bytes = await file.read()
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+    # ตรวจจับด้วย YOLO
+    results = model(image_cv, conf=0.5)
 
     detections = []
     for result in results:
         boxes = result.boxes
         for box in boxes:
+            cls_id = int(box.cls[0])
+            conf = float(box.conf[0])
+            bbox = box.xyxy[0].tolist()
+            cls_name = model.names.get(cls_id, "Unknown")
+
             detections.append({
-                "class": int(box.cls[0]),
-                "confidence": float(box.conf[0]),
-                "bbox": box.xyxy[0].tolist(), 
+                "class": cls_id,
+                "class_name": cls_name,
+                "confidence": conf,
+                "bbox": bbox,
             })
+
+    # log สรุปผลลัพธ์
+    if detections:
+        print(f"✅ พบ {len(detections)} วัตถุ: {[d['class_name'] for d in detections]}")
+    else:
+        print("❌ ไม่พบวัตถุในภาพนี้")
 
     return {
         "success": True,
+        "filename": file.filename,
         "detections": detections,
         "count": len(detections),
     }
 
-
-# Streaming กล้องปกติ
-CAMERAS = {}
 
 def stream_camera(camera_id: int):
     """Generator สำหรับ StreamingResponse ของ FastAPI"""
@@ -68,8 +86,10 @@ def stream_camera(camera_id: int):
                 break
             ret, buffer = cv2.imencode('.jpg', frame)
             frame_bytes = buffer.tobytes()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            yield (
+                b'--frame\r\n'
+                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n'
+            )
 
     return gen()
 

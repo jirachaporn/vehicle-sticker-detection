@@ -47,7 +47,7 @@ def get_locations(user_email: str):
 
     try:
         if _is_admin(user_email):
-            print(f"🔑 Admin detected: {user_email}, returning ALL locations")
+            print(f"Admin detected: {user_email}, returning ALL locations")
             loc_res = _exec_with_retry(
                 supabase.table("locations")
                 .select("location_id, location_name, location_address, location_description, location_color, created_at, location_license")

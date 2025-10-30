@@ -191,7 +191,7 @@ class ApiService {
     }
   }
 
-  //
+// แปลง  CameraImage -> JPEG
   static Uint8List convertYUV420ToJpeg(CameraImage image) {
     final yPlane = image.planes[0].bytes;
     final img = image_lib.Image(width: image.width, height: image.height);
@@ -206,7 +206,7 @@ class ApiService {
     return Uint8List.fromList(image_lib.encodeJpg(img));
   }
 
-  //ตรวจจับรถ
+  // ตรวจจับรถ
   static Future<Map<String, dynamic>?> detectVehicleFrom(
     Uint8List jpegBytes, {
     required String locationId,
@@ -214,7 +214,10 @@ class ApiService {
     required String direction,
   }) async {
     try {
-      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/detect'));
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/camera/car-detect'),
+      );
       request.fields['location_id'] = locationId;
       request.fields['model_id'] = modelId;
       request.fields['direction'] = direction;
