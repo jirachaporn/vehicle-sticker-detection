@@ -1,64 +1,85 @@
-# camera.py
+# api_service/camera.py
+import os
+import base64
 import cv2
-import threading
-import time
 import numpy as np
+from dotenv import load_dotenv
+from ultralytics import YOLO
 
-# Maps / globals
-cameras = {}
-display_threads = {}
-display_stops = {}
-latest_frame_map = {}
-latest_jpeg_map = {}
-latest_ts_map = {}
-latest_lock = threading.Lock()
-primary_cam_id = None
-latest_gen = 0
-detector_thread = None
-detector_stop = threading.Event()
+# โหลดตัวแปรจาก .env
+load_dotenv()
 
-DISPLAY_FPS = 15
-TARGET_DISPLAY_WIDTH = 640
-JPEG_QUALITY_DISPLAY = 80
+MODEL_PATH = os.getenv("CET_DETECTION_PATH")
 
-def _try_open_camera_on_index(index: int):
-    backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, None]
-    for be in backends:
-        try:
-            cap = cv2.VideoCapture(index, be) if be else cv2.VideoCapture(index)
-            if not cap.isOpened():
-                cap.release()
-                continue
-            # flush buffer
-            for _ in range(10):
-                cap.read()
-            ok, img = cap.read()
-            if ok and img is not None and img.size > 0:
-                return cap, be
+# โหลดโมเดล YOLO สำหรับ /car-detect
+model = None
+if MODEL_PATH and os.path.exists(MODEL_PATH):
+    print(f"Loading YOLO model from: {MODEL_PATH}")
+    model = YOLO(MODEL_PATH)
+    print("✅ YOLO model loaded successfully!")
+else:
+    print("⚠️ Model path not found or invalid:", MODEL_PATH)
+
+def detect_vehicle(image_base64: str):
+    """ตรวจจับยานพาหนะจาก base64"""
+    if not model:
+        raise RuntimeError("YOLO model not loaded")
+
+    image_data = base64.b64decode(image_base64.split(",")[1] if "," in image_base64 else image_base64)
+    nparr = np.frombuffer(image_data, np.uint8)
+    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    results = model(image, conf=0.5)
+
+    detections = []
+    for result in results:
+        boxes = result.boxes
+        for box in boxes:
+            detections.append({
+                "class": int(box.cls[0]),
+                "confidence": float(box.conf[0]),
+                "bbox": box.xyxy[0].tolist(), 
+            })
+
+    return {
+        "success": True,
+        "detections": detections,
+        "count": len(detections),
+    }
+
+
+# Streaming กล้องปกติ
+CAMERAS = {}
+
+def stream_camera(camera_id: int):
+    """Generator สำหรับ StreamingResponse ของ FastAPI"""
+    if camera_id not in CAMERAS:
+        cap = cv2.VideoCapture(camera_id)
+        if not cap.isOpened():
+            return None
+        CAMERAS[camera_id] = cap
+    else:
+        cap = CAMERAS[camera_id]
+
+    def gen():
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            ret, buffer = cv2.imencode('.jpg', frame)
+            frame_bytes = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+    return gen()
+
+
+def check_available_cameras():
+    """ตรวจสอบกล้องที่เชื่อมต่อและเปิดได้"""
+    available = []
+    for i in range(5):  # ลองเช็คกล้อง 0-4
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            available.append({"camera_id": i})
             cap.release()
-        except Exception:
-            continue
-    return None, None
-
-def _probe_cameras(max_index: int = 8):
-    found = []
-    for i in range(max_index + 1):
-        cap, _ = _try_open_camera_on_index(i)
-        if cap:
-            found.append(i)
-            cap.release()
-    return found
-
-def release_all_cameras():
-    global cameras, display_threads, display_stops
-    for ev in list(display_stops.values()):
-        ev.set()
-    for th in list(display_threads.values()):
-        if th and th.is_alive():
-            th.join(timeout=1)
-    display_threads.clear()
-    display_stops.clear()
-    for cid, cap in list(cameras.items()):
-        if cap and cap.isOpened():
-            cap.release()
-        cameras.pop(cid, None)
+    return available if available else None

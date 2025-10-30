@@ -1,18 +1,18 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/license_plate_model.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/notification_item.dart';
+import 'package:camera/camera.dart';
+import 'package:image/image.dart' as image_lib;
 
 class ApiService {
-  // ใช้เฉพาะ Windows → ชี้ localhost
   static final String? baseUrl = dotenv.env['API_BASE_URL'];
   static http.Client client = http.Client();
-
-  // ---------- OTP (static) ----------
-  static Uri get updatePasswordUrl => Uri.parse('$baseUrl/reset-password');
+  final SupabaseClient supa = Supabase.instance.client;
 
   // ส่ง OTP
   static Future<bool> sendOtp(String email) async {
@@ -50,7 +50,7 @@ class ApiService {
 
   // เปลี่ยนรหัสผ่านใหม่
   static Future<bool> resetPassword(String email, String newPassword) async {
-    final url = updatePasswordUrl;
+    final url = Uri.parse('$baseUrl/reset-password');
     try {
       final response = await client.post(
         url,
@@ -191,60 +191,56 @@ class ApiService {
     }
   }
 
-  // ---------- Detection (instance) ----------
-  Future<void> detectHeartbeat() async {
-    // ส่งภาพ/คำสั่งตรวจจับแบบ manual ถ้าเพิ่ม endpoint ภายหลัง
-    // await ApiService.client.post(...);
+  //
+  static Uint8List convertYUV420ToJpeg(CameraImage image) {
+    final yPlane = image.planes[0].bytes;
+    final img = image_lib.Image(width: image.width, height: image.height);
+
+    for (int y = 0; y < image.height; y++) {
+      for (int x = 0; x < image.width; x++) {
+        final pixel = yPlane[y * image.width + x];
+        img.setPixelRgba(x, y, pixel, pixel, pixel, 255);
+      }
+    }
+
+    return Uint8List.fromList(image_lib.encodeJpg(img));
   }
 
-  // ---------- Camera (instance) ----------
-  Future<bool> startCamera(String locationId) async {
-    final url = Uri.parse('$baseUrl/start-camera');
+  //ตรวจจับรถ
+  static Future<Map<String, dynamic>?> detectVehicleFrom(
+    Uint8List jpegBytes, {
+    required String locationId,
+    required String modelId,
+    required String direction,
+  }) async {
     try {
-      final res = await ApiService.client.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'location_id': locationId}),
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/detect'));
+      request.fields['location_id'] = locationId;
+      request.fields['model_id'] = modelId;
+      request.fields['direction'] = direction;
+      request.files.add(
+        http.MultipartFile.fromBytes('file', jpegBytes, filename: 'frame.jpg'),
       );
-      debugPrint('🎥 start-camera: ${res.statusCode} ${res.body}');
-      return res.statusCode == 200;
+
+      var response = await request.send();
+      if (response.statusCode == 200) {
+        var body = await response.stream.bytesToString();
+        return jsonDecode(body);
+      } else {
+        debugPrint('API error: ${response.statusCode}');
+        return null;
+      }
     } catch (e) {
-      debugPrint('❌ start-camera error: $e');
-      return false;
+      debugPrint('Error calling detectVehicle API: $e');
+      return null;
     }
   }
 
-  Future<bool> stopCamera() async {
-    final url = Uri.parse('$baseUrl/stop-camera');
-    try {
-      final res = await ApiService.client.post(url);
-      debugPrint('🛑 stop-camera: ${res.statusCode} ${res.body}');
-      return res.statusCode == 200;
-    } catch (e) {
-      debugPrint('❌ stop-camera error: $e');
-      return false;
-    }
-  }
-
-  /// URL ภาพล้วนจาก backend
-  String getFrameUrl({int? tick}) {
-    final ts = tick ?? DateTime.now().millisecondsSinceEpoch;
-    return '$baseUrl/frame_raw?ts=$ts';
-  }
-
-  /// alias เผื่อในโค้ดเดิมเคยเรียก frameUrl(...)
-  String frameUrl({int? tick}) => getFrameUrl(tick: tick);
-
-  final SupabaseClient _supa = Supabase.instance.client;
-
-  // ---------------------- READ ----------------------
-  /// ดึงทะเบียนทั้งหมด (ถ้าใส่ [locationLicense] จะกรองตาม location)
   Future<List<LicensePlate>> getAllLicensePlates({
     String? locationLicense,
   }) async {
     try {
       final query = Supabase.instance.client.from('license_plate').select();
-
       final List<dynamic> rows = locationLicense == null
           ? await query.order('license_text', ascending: true)
           : await query
@@ -277,7 +273,7 @@ class ApiService {
     try {
       final payload = plates.map((p) => p.toInsertMap()).toList();
 
-      final List<dynamic> rows = await _supa
+      final List<dynamic> rows = await supa
           .from('license_plate')
           .upsert(payload)
           .select();

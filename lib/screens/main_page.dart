@@ -14,8 +14,6 @@ import 'data_table_page.dart';
 import 'annotation_page.dart';
 import '../providers/permission_provider.dart';
 import '../providers/api_service.dart';
-import '../providers/camera_manager.dart';
-import '../providers/detection_manager.dart';
 
 class MainPage extends StatefulWidget {
   final String username;
@@ -110,25 +108,12 @@ class _MainPageState extends State<MainPage> {
                       case AppView.camera:
                         {
                           final locId = appState.locationId ?? '';
-                          return MultiProvider(
-                            providers: [
-                              ChangeNotifierProvider<CameraManager>(
-                                create: (ctx) => CameraManager(
-                                  api: ctx.read<ApiService>(),
-                                  locationId: locId,
-                                ),
-                              ),
-                              ChangeNotifierProvider<DetectionManager>(
-                                create: (ctx) => DetectionManager(
-                                  onTick: () =>
-                                      ctx.read<ApiService>().detectHeartbeat(),
-                                  interval: const Duration(milliseconds: 500),
-                                ),
-                              ),
-                            ],
+                          return Provider<ApiService>.value(
+                            value: context.read<ApiService>(),
                             child: CameraPage(locationId: locId),
                           );
                         }
+
                       case AppView.notification:
                         return NotificationPage(
                           locationId: appState.locationId ?? '',

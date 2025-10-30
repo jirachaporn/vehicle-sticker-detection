@@ -329,7 +329,6 @@ class _HomePageState extends State<HomePage> {
                           loggedInEmail: appState.loggedInEmail,
                           onTap: () {
                             appState.selectLocation(location);
-                            appState.setLocationId(location.id);
                             appState.setView(AppView.overview);
                           },
                           onEdit: () => showEditDialog(location),

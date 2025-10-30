@@ -15,14 +15,10 @@ Future<void> main() async {
 
   await dotenv.load();
   await initializeDateFormatting('en');
-
-  // ✅ ไม่เก็บ session / ไม่ auto refresh
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
-
-  // ✅ dev auto-login (ไม่มี context ตรงนี้ ใช้ได้)
   await _loginDevUser();
 
   runApp(
