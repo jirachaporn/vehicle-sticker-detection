@@ -12,7 +12,7 @@ from .email_permission import router as permission_router
 from .routes_location import router as locations_router
 from .router_email import router as email_router
 from .router_camera import router as camera_router
-from .routes_models import router as models_router
+from .routes_models_noti import router as models_router
 from .routes_notifications_permission import router as permissions_router
 
 
