@@ -5,7 +5,7 @@ import 'package:myproject/widgets/back_to_sign.dart';
 import '../widgets/background.dart';
 import '../widgets/loading.dart';
 import 'package:myproject/providers/api_service.dart';
-import '../providers/snackbar_helper.dart';
+import '../providers/snackbar_func.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   final String email;

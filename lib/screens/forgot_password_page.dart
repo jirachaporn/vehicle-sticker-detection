@@ -6,7 +6,7 @@ import '../providers/api_service.dart';
 import 'otp_page.dart';
 import '../widgets/loading.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../providers/snackbar_helper.dart';
+import '../providers/snackbar_func.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});

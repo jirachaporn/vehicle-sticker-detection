@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/license_plate_model.dart';
+// import '../models/license_plate_model.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/notification_item.dart';
 import 'package:camera/camera.dart';
@@ -191,7 +191,7 @@ class ApiService {
     }
   }
 
-// แปลง  CameraImage -> JPEG
+  // แปลง  CameraImage -> JPEG
   static Uint8List convertYUV420ToJpeg(CameraImage image) {
     final yPlane = image.planes[0].bytes;
     final img = image_lib.Image(width: image.width, height: image.height);
@@ -239,81 +239,78 @@ class ApiService {
     }
   }
 
-  Future<List<LicensePlate>> getAllLicensePlates({
-    String? locationLicense,
-  }) async {
-    try {
-      final query = Supabase.instance.client.from('license_plate').select();
-      final List<dynamic> rows = locationLicense == null
-          ? await query.order('license_text', ascending: true)
-          : await query
-                .eq('location_license', locationLicense)
-                .order('license_text', ascending: true);
+  // Future<List<LicensePlate>> getAllLicensePlates({
+  //   String? locationLicense,
+  // }) async {
+  //   try {
+  //     final query = Supabase.instance.client.from('license_plate').select();
+  //     final List<dynamic> rows = locationLicense == null
+  //         ? await query.order('license_text', ascending: true)
+  //         : await query
+  //               .eq('location_license', locationLicense)
+  //               .order('license_text', ascending: true);
 
-      return rows
-          .map((e) => LicensePlate.fromMap(e as Map<String, dynamic>))
-          .toList();
-    } catch (e, st) {
-      debugPrint('❌ getAllLicensePlates error: $e\n$st');
-      return [];
-    }
-  }
+  //     return rows
+  //         .map((e) => LicensePlate.fromMap(e as Map<String, dynamic>))
+  //         .toList();
+  //   } catch (e, st) {
+  //     debugPrint('❌ getAllLicensePlates error: $e\n$st');
+  //     return [];
+  //   }
+  // }
 
   /// (เดิม) ดึงตาม location (คงไว้เพื่อไม่ต้องแก้ที่อื่น)
-  Future<List<LicensePlate>> getLicensePlatesByLocation(
-    String locationLicense,
-  ) async {
-    return getAllLicensePlates(locationLicense: locationLicense);
-  }
+  // Future<List<LicensePlate>> getLicensePlatesByLocation(
+  //   String locationLicense,
+  // ) async {
+  //   return getAllLicensePlates(locationLicense: locationLicense);
+  // }
 
-  // ---------------------- CREATE/UPSERT ----------------------
-  /// เพิ่มหลายรายการครั้งเดียว (batch). ถ้า [upsert]=true จะอัปเดตเมื่อ PK ซ้ำ
-  Future<List<LicensePlate>> addLicensePlates(
-    List<LicensePlate> plates, {
-    bool upsert = false,
-  }) async {
-    if (plates.isEmpty) return <LicensePlate>[];
-    try {
-      final payload = plates.map((p) => p.toInsertMap()).toList();
+  // Future<List<LicensePlate>> addLicensePlates(
+  //   List<LicensePlate> plates, {
+  //   bool upsert = false,
+  // }) async {
+  //   if (plates.isEmpty) return <LicensePlate>[];
+  //   try {
+  //     final payload = plates.map((p) => p.toInsertMap()).toList();
 
-      final List<dynamic> rows = await supa
-          .from('license_plate')
-          .upsert(payload)
-          .select();
+  //     final List<dynamic> rows = await supa
+  //         .from('license_plate')
+  //         .upsert(payload)
+  //         .select();
 
-      debugPrint('✅ addLicensePlates: inserted/updated ${rows.length} rows');
-      return rows
-          .map((e) => LicensePlate.fromMap(e as Map<String, dynamic>))
-          .toList();
-    } catch (e, st) {
-      debugPrint('❌ addLicensePlates error: $e\n$st');
-      rethrow;
-    }
-  }
+  //     debugPrint('✅ addLicensePlates: inserted/updated ${rows.length} rows');
+  //     return rows
+  //         .map((e) => LicensePlate.fromMap(e as Map<String, dynamic>))
+  //         .toList();
+  //   } catch (e, st) {
+  //     debugPrint('❌ addLicensePlates error: $e\n$st');
+  //     rethrow;
+  //   }
+  // }
 
-  /// เพิ่มทีละรายการ (helper)
-  Future<LicensePlate?> addLicensePlate(
-    LicensePlate plate, {
-    bool upsert = false,
-  }) async {
-    final list = await addLicensePlates([plate], upsert: upsert);
-    return list.isNotEmpty ? list.first : null;
-  }
+  /// เพิ่มทีละรายการ
+  // Future<LicensePlate?> addLicensePlate(
+  //   LicensePlate plate, {
+  //   bool upsert = false,
+  // }) async {
+  //   final list = await addLicensePlates([plate], upsert: upsert);
+  //   return list.isNotEmpty ? list.first : null;
+  // }
 
-  // ---------------------- DELETE ----------------------
-  /// ลบหลายรายการตามรายการ license_id
-  Future<bool> deleteLicensePlates(List<String> licenseIds) async {
-    if (licenseIds.isEmpty) return true;
-    try {
-      await Supabase.instance.client
-          .from('license_plate')
-          .delete()
-          .inFilter('license_id', licenseIds);
-      debugPrint('✅ Deleted ${licenseIds.length} license plates');
-      return true;
-    } catch (e) {
-      debugPrint('❌ Error deleting license plates: $e');
-      return false;
-    }
-  }
+
+  // Future<bool> deleteLicensePlates(List<String> licenseIds) async {
+  //   if (licenseIds.isEmpty) return true;
+  //   try {
+  //     await Supabase.instance.client
+  //         .from('license_plate')
+  //         .delete()
+  //         .inFilter('license_id', licenseIds);
+  //     debugPrint('✅ Deleted ${licenseIds.length} license plates');
+  //     return true;
+  //   } catch (e) {
+  //     debugPrint('❌ Error deleting license plates: $e');
+  //     return false;
+  //   }
+  // }
 }

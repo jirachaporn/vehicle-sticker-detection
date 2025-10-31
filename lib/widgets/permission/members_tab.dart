@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/permission_provider.dart';
 import '../../models/permission.dart';
-import '../../providers/snackbar_helper.dart';
+import '../../providers/snackbar_func.dart';
 
 class MembersTab extends StatefulWidget {
   final String locationId;

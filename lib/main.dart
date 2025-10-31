@@ -8,6 +8,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'providers/app_state.dart';
 import 'providers/api_service.dart';
 import 'providers/permission_provider.dart';
+import 'providers/camera_manager.dart';
 import 'screens/main_page.dart';
 
 Future<void> main() async {
@@ -27,6 +28,7 @@ Future<void> main() async {
         Provider<ApiService>(create: (_) => ApiService()),
         ChangeNotifierProvider(create: (_) => AppState()),
         ChangeNotifierProvider(create: (_) => PermissionProvider()),
+        ChangeNotifierProvider(create: (_) => CameraManager()),
       ],
       child: const MyApp(),
     ),
@@ -42,12 +44,12 @@ Future<void> _loginDevUser() async {
       password: '123456789A.',
     );
     if (res.user != null) {
-      debugPrint('✅ Dev login: ${res.user!.email}');
+      debugPrint('Dev login: ${res.user!.email}');
     } else {
-      debugPrint('❌ Dev login failed');
+      debugPrint('Dev login failed');
     }
   } catch (e) {
-    debugPrint('❌ Dev login error: $e');
+    debugPrint('Dev login error: $e');
   }
 }
 

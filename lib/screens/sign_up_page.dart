@@ -11,7 +11,7 @@ import 'package:myproject/widgets/back_to_sign.dart';
 import '../widgets/background.dart';
 import 'otp_page.dart';
 import '../providers/api_service.dart';
-import '../providers/snackbar_helper.dart';
+import '../providers/snackbar_func.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});

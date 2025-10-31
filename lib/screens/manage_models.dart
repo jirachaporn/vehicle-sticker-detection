@@ -5,7 +5,7 @@ import 'package:myproject/widgets/manage_model/sticker_card.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:collection/collection.dart';
 import '../widgets/loading.dart';
-import '../providers/snackbar_helper.dart';
+import '../providers/snackbar_func.dart';
 
 class ManageModels extends StatefulWidget {
   final String locationId;

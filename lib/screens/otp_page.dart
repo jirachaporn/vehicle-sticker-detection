@@ -7,7 +7,7 @@ import 'package:myproject/widgets/loading.dart';
 import '../widgets/background.dart';
 import 'reset_password.dart';
 import '../providers/api_service.dart';
-import '../providers/snackbar_helper.dart';
+import '../providers/snackbar_func.dart';
 
 class OTPPage extends StatefulWidget {
   final String email;

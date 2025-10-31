@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:archive/archive_io.dart';
-import '../../providers/snackbar_helper.dart';
+import '../../providers/snackbar_func.dart';
 
 class AnnotationDialog extends StatefulWidget {
   const AnnotationDialog({
