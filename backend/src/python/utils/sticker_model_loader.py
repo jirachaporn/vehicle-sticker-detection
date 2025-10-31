@@ -3,6 +3,8 @@ import os, hashlib, threading, requests
 from typing import Optional, Dict, Any
 from ultralytics import YOLO
 from ..db.supabase_client import get_supabase_client
+from typing import Optional
+import requests, os, logging
 
 _LOCK = threading.Lock()
 _MODEL_CACHE: Dict[str, YOLO] = {}
@@ -23,6 +25,38 @@ def _download_if_needed(url: str) -> str:
                 if chunk:
                     f.write(chunk)
     return local
+
+def resolve_model_local_path_for_location(location_id: str) -> str:
+    try:
+        sb = get_supabase_client()
+        res = (sb.table("model")
+            .select("model_url, location_id, is_active, sticker_status, created_at")
+            .eq("location_id", location_id)
+            .eq("is_active", True)
+            .eq("sticker_status", "ready").order("created_at", desc=True).limit(1)
+            .execute())
+        rows = res.data or []
+        if rows and rows[0].get("model_url"):
+            return _download_if_needed(rows[0]["model_url"])
+    except Exception as e:
+        logging.warning(f"[model-resolve] fallback to local model. reason={e}")
+
+    p = os.getenv("STICKER_MODEL_PATH", "models/sc9_sticker.pt")
+    if not os.path.isabs(p):
+        p = os.path.join(os.getcwd(), p)
+    if not os.path.exists(p):
+        raise FileNotFoundError(f"Sticker model not found at: {p}")
+    return p
+
+def _download_if_needed(url: str) -> str:
+    name = _hash(url) + ".pt"
+    path = os.path.join(CACHE_DIR, name)
+    if not os.path.exists(path):
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
+        with open(path, "wb") as f:
+            f.write(r.content)
+    return path
 
 def _get_active_sticker_model_record(location_id: str) -> Optional[Dict[str, Any]]:
     sb = get_supabase_client()
