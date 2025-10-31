@@ -12,11 +12,11 @@ HOURS_BUCKETS = [0, 3, 6, 9, 12, 15, 18, 21]
 def _parse_ts_to_local(ts: str) -> datetime | None:
     if not ts:
         return None
-    s = ts.replace("Z", "+00:00")
     try:
+        s = ts.strip()
         dt = datetime.fromisoformat(s)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+            return dt.replace(tzinfo=TZ)
         return dt.astimezone(TZ)
     except Exception:
         return None

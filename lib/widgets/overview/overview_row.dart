@@ -6,8 +6,8 @@ Widget OverviewRow(Map<String, dynamic> stats) {
     runSpacing: 12,
     alignment: WrapAlignment.center,
     children: [
-      StatBox(Icons.login, 'In', stats['todayInOut']?['in']?.toString() ?? '0', Colors.green),
-      StatBox(Icons.logout, 'Out', stats['todayInOut']?['out']?.toString() ?? '0', Colors.blue),
+      StatBox(Icons.login, 'Today In', stats['todayInOut']?['in']?.toString() ?? '0', Colors.green),
+      StatBox(Icons.logout, 'Today Out', stats['todayInOut']?['out']?.toString() ?? '0', Colors.blue),
       StatBox(Icons.verified, 'Authorized', stats['authorizedVehicles']?.toString() ?? '0', Colors.green),
       StatBox(Icons.warning, 'Unauthorized', stats['unauthorizedVehicles']?.toString() ?? '0', Colors.red),
       StatBox(Icons.directions_car, 'Total Vehicles', stats['totalVehicles']?.toString() ?? '0', Colors.blue),
