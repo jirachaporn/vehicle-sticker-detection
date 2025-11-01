@@ -33,11 +33,6 @@ async def detect_vehicle_route(
     """ตรวจจับรถจากภาพ และส่งต่อไปยัง /detect เฉพาะเมื่อเจอ car"""
     if not model:
         raise RuntimeError("YOLO model not loaded")
-
-    print("location_id",location_id)
-    print("model_id",model_id)
-    print("direction",direction)
-    
     
     image_bytes = await file.read()
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")

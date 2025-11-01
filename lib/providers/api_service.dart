@@ -216,7 +216,8 @@ class ApiService {
     try {
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('$baseUrl/camera/car-detect'),
+        Uri.parse('http://127.0.0.1:5000/camera/car-detect'),
+        // Uri.parse('$baseUrl/camera/car-detect'),
       );
       request.fields['location_id'] = locationId;
       request.fields['model_id'] = modelId;

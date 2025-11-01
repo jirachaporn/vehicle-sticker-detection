@@ -69,7 +69,7 @@ class _MembersTabState extends State<MembersTab> {
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
             return const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(strokeWidth: 3),
             );
           }
           if (snap.hasError) {
@@ -241,12 +241,13 @@ class _MembersTabState extends State<MembersTab> {
                                       );
                                       if (!mounted) return;
                                       showSuccessMessage(
-                                        context,'Permissions updated successfully',
+                                        context,
+                                        'Permissions updated successfully',
                                       );
                                       await refresh();
                                     } catch (e) {
                                       if (!mounted) return;
-                                      showFailMessage(context,'Error', e);
+                                      showFailMessage(context, 'Error', e);
                                     }
                                   },
                                   validator: (_) => null,
@@ -256,21 +257,23 @@ class _MembersTabState extends State<MembersTab> {
                             if (!isOwner)
                               disableBtn(() async {
                                 try {
-                                  await provider.updatePermission(
+                                  await provider.disableMember(
                                     locationId: widget.locationId,
                                     email: m.email,
-                                    memberName: m.name,
-                                    newPermission: m.permission,
+                                    name: m.name ??'Unknown',
+                                    permission: m.permission,
+                                    byEmail: provider.currentEmail, 
                                   );
 
                                   if (!mounted) return;
                                   showSuccessMessage(
-                                    context,'Member disabled and logged',
+                                    context,
+                                    'Member disabled and logged',
                                   );
                                   await refresh();
                                 } catch (e) {
                                   if (!mounted) return;
-                                  showFailMessage(context,'Error', e);
+                                  showFailMessage(context, 'Error', e);
                                 }
                               }),
                           ],
