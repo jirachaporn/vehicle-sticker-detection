@@ -60,8 +60,8 @@ class _SignUpPageState extends State<SignUpPage> {
 
   // --- Sign up ---------------------------------------------------------------
   Future<void> signUpUser() async {
-    final email = userStr.email.trim();
-    final username = userStr.username.trim();
+    final email = userStr.email.trim().toLowerCase();
+    final username = userStr.username.trim().toLowerCase();
     final password = userStr.password;
 
     if (!(formKey.currentState?.validate() ?? false)) return;
@@ -72,14 +72,18 @@ class _SignUpPageState extends State<SignUpPage> {
       // เช็คอีเมลซ้ำ
       await checkEmailExists(email);
       if (isEmailTaken) {
-        showFailMessage(context,'Email Error', 'Email already registered');
+        showFailMessage(context, 'Email Error', 'Email already registered');
         return;
       }
 
       // ส่ง OTP
       final otpRes = await ApiService.sendSignupOtp(email);
       if (otpRes['success'] != true) {
-        showFailMessage(context,'OTP Error', otpRes['message'] ?? 'Failed to send OTP');
+        showFailMessage(
+          context,
+          'OTP Error',
+          otpRes['message'] ?? 'Failed to send OTP',
+        );
         return;
       }
 
@@ -93,12 +97,15 @@ class _SignUpPageState extends State<SignUpPage> {
       final supabase = Supabase.instance.client;
       final passwordHash = sha256.convert(utf8.encode(password)).toString();
       final colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#AB47BC'];
-      final color = colors[Random.secure().nextInt(colors.length)];
-      final newAuthId = const Uuid().v4();
+      final color = colors[Random().nextInt(colors.length)];
+
+      // สร้าง UUID เดียวใช้สำหรับทั้งสองตาราง
+      final newUserId = const Uuid().v4();
       final nowThai = DateTime.now().toUtc().add(const Duration(hours: 7));
 
+      // 1. Insert ไปยัง auth_users ก่อน
       await supabase.from('auth_users').insert({
-        'auth_id': newAuthId,
+        'auth_id': newUserId,
         'auth_email': email,
         'auth_username': username,
         'password_hash': passwordHash,
@@ -106,8 +113,9 @@ class _SignUpPageState extends State<SignUpPage> {
         'last_sign_in': null,
       });
 
+      // 2. Insert ไปยัง users โดยใช้ user_id เดียวกัน
       await supabase.from('users').insert({
-        'user_id': newAuthId, 
+        'user_id': newUserId,
         'user_name': username,
         'user_email': email,
         'color_profile': color,
@@ -116,13 +124,16 @@ class _SignUpPageState extends State<SignUpPage> {
 
       if (!mounted) return;
 
+      // ไปหน้า sign in พร้อมแสดงข้อความสำเร็จ
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const SignInPage()),
       );
+
+      showSuccessMessage(context,'Signup Successful');
     } catch (e) {
       debugPrint('❌ Signup failed: $e');
-      showFailMessage(context,'Signup Failed', 'Please try to sign up again.');
+      showFailMessage(context, 'Signup Failed', 'Please try to sign up again.');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }

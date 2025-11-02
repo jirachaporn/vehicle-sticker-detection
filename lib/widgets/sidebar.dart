@@ -257,9 +257,7 @@ class Sidebar extends StatelessWidget {
           onExit: (_) => setState(() => isHovered = false),
           child: GestureDetector(
             onTap: () async {
-              await context
-                  .read<AppState>()
-                  .signOutAndReset(); // ✅ เคลียร์ state
+              context.read<AppState>().signOutAndReset();
               if (context.mounted) {
                 Navigator.pushAndRemoveUntil(
                   context,

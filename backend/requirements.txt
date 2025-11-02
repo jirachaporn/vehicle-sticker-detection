@@ -1,3 +1,10 @@
 fastapi
 cloudinary
 supabase
+uvicorn
+python-dotenv
+pytz
+tzdata
+requests
+ultralytics
+python-multipart

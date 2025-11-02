@@ -175,22 +175,22 @@
 //   }
 // }
 
-
-
 import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
 import '../../providers/camera_manager.dart';
-import 'package:camera/camera.dart';
 
 class CameraBox extends StatelessWidget {
   final String title;
+  final int cameraIndex;
 
-  const CameraBox({super.key, required this.title});
+  const CameraBox({super.key, required this.title, required this.cameraIndex});
 
   @override
   Widget build(BuildContext context) {
     final manager = context.watch<CameraManager>();
-    final controller = manager.controller;
+    final controller =
+        manager.controllers[cameraIndex];
 
     return Container(
       decoration: BoxDecoration(
@@ -224,7 +224,9 @@ class CameraBox extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const Spacer(),
               ],
@@ -232,8 +234,8 @@ class CameraBox extends StatelessWidget {
           ),
           // Camera preview
           Container(
-            height: 400,
-            width: double.infinity,
+            height: 700, // กำหนดความสูงของกล้อง
+            width: double.infinity, // กำหนดความกว้างของกล้องให้เต็ม
             decoration: const BoxDecoration(
               color: Colors.black,
               borderRadius: BorderRadius.only(
@@ -245,7 +247,14 @@ class CameraBox extends StatelessWidget {
                 ? const Center(
                     child: CircularProgressIndicator(color: Colors.white),
                   )
-                : CameraPreview(controller),
+                : FittedBox(
+                    fit: BoxFit.contain,
+                    child: SizedBox(
+                      width: controller.value.previewSize!.width,
+                      height: controller.value.previewSize!.height,
+                      child: CameraPreview(controller),
+                    ),
+                  ),
           ),
         ],
       ),

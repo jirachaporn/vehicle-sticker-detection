@@ -40,13 +40,26 @@ class _SignInPageState extends State<SignInPage> {
     final password = _passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
-      showFailMessage(context,'Error', 'Please fill in all required fields.');
+      showFailMessage(context, 'Error', 'Please fill in all required fields.');
+      return;
+    }
+
+    // ตรวจสอบรูปแบบ email
+    if (!RegExp(
+      r'^[\w-]+(\.[\w-]+)*@([\w-]+\.)+[a-zA-Z]{2,7}$',
+    ).hasMatch(email)) {
+      showFailMessage(
+        context,
+        'Invalid Email',
+        'Please enter a valid email address.',
+      );
       return;
     }
 
     setState(() => isLoading = true);
 
     try {
+      // ค้นหาผู้ใช้จาก email เท่านั้น
       final authUser = await supabase
           .from('auth_users')
           .select('*')
@@ -54,47 +67,80 @@ class _SignInPageState extends State<SignInPage> {
           .maybeSingle();
 
       debugPrint('authUser: ${authUser.toString()}');
+
       if (authUser == null) {
-        showFailMessage(context,'Login Failed', 'Email or password is incorrect.');
+        showFailMessage(
+          context,
+          'Login Failed',
+          'Email or password is incorrect.',
+        );
         return;
       }
+
       final passwordHash = sha256.convert(utf8.encode(password)).toString();
       if (passwordHash != (authUser['password_hash'] as String)) {
-        showFailMessage(context,'Login Failed', 'Email or password is incorrect.');
+        showFailMessage(
+          context,
+          'Login Failed',
+          'Email or password is incorrect.',
+        );
         return;
       }
 
+      // อัพเดทเวลาล็อกอินล่าสุด
       await supabase
           .from('auth_users')
-          .update({'last_sign_in': DateTime.now().toIso8601String()})
+          .update({
+            'last_sign_in': DateTime.now()
+                .toUtc()
+                .add(const Duration(hours: 7))
+                .toIso8601String(),
+          })
           .eq('auth_id', authUser['auth_id']);
 
+      // ดึงข้อมูลโปรไฟล์จากตาราง users โดยใช้ user_id (ซึ่งตรงกับ auth_id)
       final userProfile = await supabase
           .from('users')
-          .select('user_name, color_profile')
-          .eq('user_email', email)
-          .limit(1)
+          .select('user_name, user_email, color_profile, user_role')
+          .eq('user_id', authUser['auth_id'])
           .maybeSingle();
 
-      final userName = (userProfile?['user_name'] as String?)?.trim() ?? email;
+      // ใช้ข้อมูลจาก users ถ้ามี, ถ้าไม่มีใช้จาก auth_users
+      final userName =
+          (userProfile?['user_name'] as String?)?.trim() ??
+          (authUser['auth_username'] as String?)?.trim() ??
+          'User';
+      final userEmail =
+          (userProfile?['user_email'] as String?)?.trim() ??
+          (authUser['auth_email'] as String?)?.trim() ??
+          '';
       final colorHex =
           (userProfile?['color_profile'] as String?)?.trim() ?? '#3254D0';
+      // final userRole = (userProfile?['user_role'] as String?)?.trim() ?? 'user';
 
-      showSuccessMessage(context,'Welcome $userName!');
+      // final bool isAdmin = userRole == 'admin';
+      // context.read<AppState>().setAdminStatus(isAdmin);
+      context.read<AppState>().setLoggedInEmail(userEmail);
+      showSuccessMessage(context, 'Welcome $userName!');
+
       if (!mounted) return;
-
-      context.read<AppState>().setLoggedInEmail(email);
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              MainPage(username: userName, email: email, colorHex: colorHex),
+          builder: (_) => MainPage(
+            username: userName,
+            email: userEmail,
+            colorHex: colorHex,
+          ),
         ),
       );
     } catch (e) {
       debugPrint('Login error: $e');
-      showFailMessage(context,'Unexpected Error', 'Something went wrong.');
+      showFailMessage(
+        context,
+        'Unexpected Error',
+        'Something went wrong. Please try again.',
+      );
     } finally {
       if (mounted) setState(() => isLoading = false);
     }

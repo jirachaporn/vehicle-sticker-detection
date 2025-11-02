@@ -62,11 +62,6 @@ class PermissionProvider with ChangeNotifier {
     }
   }
 
-  // Future<List<PermissionMember>> loadMembers(String locationId) async {
-  //   debugPrint("loadMembers");
-  //   return [];
-  // }
-
   Future<List<Map<String, dynamic>>> loadLogs(String locationId) async {
     try {
       final res = await supa

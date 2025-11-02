@@ -72,7 +72,7 @@ class _OverviewPageState extends State<OverviewPage> {
             if (isLoading)
               const Padding(
                 padding: EdgeInsets.all(50),
-                child: CircularProgressIndicator(),
+                child: CircularProgressIndicator(color: Color(0xFF2563EB)),
               )
             else if (stats.isEmpty)
               const Padding(

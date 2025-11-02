@@ -40,7 +40,6 @@ class LogsTab extends StatelessWidget {
           );
         }
 
-        // Sort logs by date (newest to oldest)
         logs.sort((a, b) {
           final aTs =
               DateTime.tryParse(a['created_at'] ?? '') ??
@@ -48,12 +47,11 @@ class LogsTab extends StatelessWidget {
           final bTs =
               DateTime.tryParse(b['created_at'] ?? '') ??
               DateTime.fromMillisecondsSinceEpoch(0);
-          return bTs.compareTo(aTs); // From newest to oldest
+          return bTs.compareTo(aTs);
         });
 
         return Column(
           children: [
-            // Header with reload button
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
               color: Colors.white,
@@ -94,15 +92,13 @@ class LogsTab extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.refresh),
                     onPressed: () {
-                      provider.loadLogs(locationId); // Reload logs on press
+                      provider.loadLogs(locationId);
                     },
                   ),
                 ],
               ),
             ),
             const Divider(height: 1, color: Color(0xFFE0E0E0)),
-
-            // Content
             Expanded(
               child: Container(
                 color: Colors.grey.shade100,
@@ -138,20 +134,19 @@ class LogsTab extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(
+                              color: getStatusColor(
                                 status,
                               ).withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
-                              _getStatusIcon(status),
-                              color: _getStatusColor(status),
+                              getStatusIcon(status),
+                              color: getStatusColor(status),
                               size: 18,
                             ),
                           ),
                           const SizedBox(width: 12),
 
-                          // Member Info - better organized
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -192,7 +187,7 @@ class LogsTab extends StatelessWidget {
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
-                                        _getStatusText(status, permission),
+                                        getStatusText(status, permission),
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: Colors.grey.shade600,
@@ -237,7 +232,7 @@ class LogsTab extends StatelessWidget {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                _formatTime(createdAt),
+                                formatTime(createdAt),
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey.shade500,
@@ -258,7 +253,7 @@ class LogsTab extends StatelessWidget {
     );
   }
 
-  Color _getStatusColor(String status) {
+  Color getStatusColor(String status) {
     switch (status) {
       case 'invited':
         return Colors.blue;
@@ -271,7 +266,7 @@ class LogsTab extends StatelessWidget {
     }
   }
 
-  IconData _getStatusIcon(String status) {
+  IconData getStatusIcon(String status) {
     switch (status) {
       case 'invited':
         return Icons.mail_outline;
@@ -284,8 +279,8 @@ class LogsTab extends StatelessWidget {
     }
   }
 
-  String _getStatusText(String status, String permission) {
-    final permissionText = _getPermissionText(permission);
+  String getStatusText(String status, String permission) {
+    final permissionText = getPermissionText(permission);
 
     switch (status) {
       case 'invited':
@@ -299,7 +294,7 @@ class LogsTab extends StatelessWidget {
     }
   }
 
-  String _getPermissionText(String permission) {
+  String getPermissionText(String permission) {
     switch (permission.toLowerCase()) {
       case 'edit':
         return 'Edit';
@@ -314,7 +309,7 @@ class LogsTab extends StatelessWidget {
     }
   }
 
-  String _formatTime(DateTime? dt) {
+  String formatTime(DateTime? dt) {
     if (dt == null) return '-';
     final now = DateTime.now();
     final diff = now.difference(dt);
