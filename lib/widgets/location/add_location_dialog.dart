@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/location.dart';
 import 'package:uuid/uuid.dart';
-import 'add_license_dialog.dart';
+import 'license/add_license_dialog.dart';
 
 class AddLocationDialog extends StatefulWidget {
   final Location? initialLocation;

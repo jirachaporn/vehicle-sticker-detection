@@ -25,13 +25,16 @@ class _CameraPageState extends State<CameraPage> {
   }
 
   Future<void> loadCameras() async {
-    setState(() => loading = true);
+    setState(() {
+      loading = true;
+      warning = '';
+    });
 
     try {
       final allCams = await availableCameras();
       if (allCams.isEmpty) {
         setState(() {
-          warning = 'No camera detected';
+          warning = 'No external webcam found';
           loading = false;
         });
         return;
@@ -40,10 +43,9 @@ class _CameraPageState extends State<CameraPage> {
       final manager = context.read<CameraManager>();
       await manager.init(allCams);
 
-      // เช็คว่า init สำเร็จหรือไม่
-      if (!manager.isInitialized) {
+      if (!manager.isInitialized || manager.controllers.isEmpty) {
         setState(() {
-          warning = 'Please connect external webcam';
+          warning = 'No external webcam found';
           loading = false;
         });
         return;
@@ -61,6 +63,7 @@ class _CameraPageState extends State<CameraPage> {
     } catch (e) {
       debugPrint('Error loading cameras: $e');
       setState(() {
+        warning = 'Camera initialization failed';
         loading = false;
       });
     }
@@ -92,35 +95,26 @@ class _CameraPageState extends State<CameraPage> {
               const Center(
                 child: CircularProgressIndicator(color: Color(0xFF2563EB)),
               )
+            else if (warning.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 40),
+                child: Center(
+                  child: Text(
+                    'No external webcam found',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      color: Colors.red,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
             else
               Consumer<CameraManager>(
                 builder: (context, manager, _) {
-                  if (!manager.isInitialized || manager.controllers.isEmpty) {
-                    return Center(
-                      child: Text(
-                        warning.isEmpty
-                            ? 'Please connect external webcam'
-                            : warning,
-                        style: const TextStyle(color: Colors.orange),
-                      ),
-                    );
-                  }
-
                   return Column(
                     children: [
-                      if (warning.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Text(
-                            warning,
-                            style: const TextStyle(
-                              color: Colors.orange,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-
-                      // แสดงกล้องตามจำนวนที่ เชื่อม 1 - 2 สูงสุดแค่ 2
                       for (int i = 0; i < manager.controllers.length; i++) ...[
                         CameraBox(title: "Camera ${i + 1}", cameraIndex: i),
                         const SizedBox(height: 20),

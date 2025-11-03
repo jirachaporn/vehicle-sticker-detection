@@ -247,7 +247,6 @@ class _DataTablePageState extends State<DataTablePage> {
     );
   }
 
-  // viewImage ฟังก์ชันสำหรับการแสดงภาพ
   void viewImage(String? url) {
     showDialog(
       context: context,
@@ -298,7 +297,6 @@ class _DataTablePageState extends State<DataTablePage> {
     );
   }
 
-  // utils
   String fmtTime(dynamic v) {
     if (v == null) return '-';
     try {
@@ -336,7 +334,6 @@ class _DataTablePageState extends State<DataTablePage> {
     );
   }
 
-  // ฟิลเตอร์การค้นหา
   Widget buildFilters() {
     return Container(
       padding: const EdgeInsets.all(16),

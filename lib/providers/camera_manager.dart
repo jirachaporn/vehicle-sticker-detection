@@ -4,10 +4,12 @@ import 'api_service.dart';
 
 class CameraManager extends ChangeNotifier {
   Map<int, CameraController> controllers = {};
+  Map<int, String> directions = {};
   bool isInitialized = false;
   String? locationId;
   String? modelId;
   bool detecting = false;
+  bool disposing = false;
 
   Future<void> init(List<CameraDescription> cameras) async {
     if (cameras.isEmpty) return;
@@ -16,7 +18,6 @@ class CameraManager extends ChangeNotifier {
       return !cam.name.toLowerCase().contains('hp wide vision');
     }).toList();
 
-    // ใช้ได้สูงสุด 2 กล้อง
     final camsToUse = filteredCams.length > 2
         ? filteredCams.sublist(0, 2)
         : filteredCams;
@@ -26,19 +27,22 @@ class CameraManager extends ChangeNotifier {
       return;
     }
 
-    // ปิดการใช้งานกล้องเก่าทุกตัว
-    for (var controller in controllers.values) {
-      await controller.dispose();
-    }
-    controllers.clear();
+    // ปิดกล้องเก่าทั้งหมดก่อนสร้างใหม่
+    await disposeAllControllers();
 
-    // สร้างและ initialize กล้องใหม่
+    // สร้างกล้องใหม่และตั้ง direction
     for (var i = 0; i < camsToUse.length; i++) {
       final camera = camsToUse[i];
       final controller = CameraController(camera, ResolutionPreset.medium);
       await controller.initialize();
       controllers[i] = controller;
-      debugPrint('Initialized camera $i: ${camera.name}');
+
+      final dir = i == 0 ? 'in' : 'out';
+      directions[i] = dir;
+
+      debugPrint(
+        'Initialized camera $i ($dir): ${camera.name}',
+      );
     }
 
     isInitialized = true;
@@ -55,51 +59,71 @@ class CameraManager extends ChangeNotifier {
     if (!isInitialized || locationId == null || modelId == null) return;
     if (detecting) return;
     detecting = true;
+    disposing = false;
     detectLoop();
   }
 
-  void stopDetection() {
+  Future<void> stopDetection() async {
     detecting = false;
-    for (var controller in controllers.values) {
-      controller.dispose();
-    }
-    controllers.clear();
+    disposing = true;
+    await disposeAllControllers();
+    disposing = false;
   }
 
-  void detectLoop() async {
-    while (detecting && locationId != null && modelId != null) {
+  Future<void> disposeAllControllers() async {
+    for (var controller in controllers.values) {
       try {
-        for (var entry in controllers.entries) {
-          final index = entry.key;
-          final controller = entry.value;
+        if (controller.value.isInitialized) {
+          await controller.dispose();
+        }
+      } catch (e) {
+        debugPrint('⚠️ Error disposing controller: $e');
+      }
+    }
+    controllers.clear();
+    directions.clear();
+  }
 
-          if (controller.value.isInitialized) {
+  Future<void> detectLoop() async {
+    while (detecting && !disposing && locationId != null && modelId != null) {
+      for (var entry in controllers.entries) {
+        if (!detecting || disposing) break;
+
+        final index = entry.key;
+        final controller = entry.value;
+        final direction = directions[index];
+
+        try {
+          if (controller.value.isInitialized && !disposing) {
             final image = await controller.takePicture();
             final bytes = await image.readAsBytes();
-            final direction = index == 0 ? 'in' : 'out';
+
             await ApiService.detectVehicleFrom(
               bytes,
               locationId: locationId!,
               modelId: modelId!,
-              direction: direction,
-            );
-
-            debugPrint(
-              'Camera $index sent detection with direction: $direction',
+              direction: direction!,
             );
           }
+        } catch (e) {
+          if (e.toString().contains('Disposed CameraController')) {
+            debugPrint('Camera $index ($direction) was disposed mid-detection',);
+            detecting = false;
+            break;
+          } else {
+            debugPrint('Camera detection error ($direction): $e');
+          }
         }
-      } catch (e) {
-        debugPrint('Camera detection error: $e');
       }
-
-      await Future.delayed(const Duration(seconds: 1));
     }
   }
 
   @override
-  void dispose() {
-    stopDetection();
+  Future<void> dispose() async {
+    detecting = false;
+    disposing = true;
+    await disposeAllControllers();
+    disposing = false;
     super.dispose();
   }
 }

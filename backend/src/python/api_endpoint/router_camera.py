@@ -11,7 +11,7 @@ from PIL import Image
 router = APIRouter()
 load_dotenv()
 
-MODEL_PATH = os.getenv("CET_DETECTION_PATH")
+MODEL_PATH = os.getenv("CAR_DETECTION_PATH")
 API_BASE_URL = os.getenv("API_BASE_URL")
 
 model = None
@@ -38,7 +38,7 @@ async def detect_vehicle_route(
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
-    results = model(image_cv, conf=0.5)
+    results = model(image_cv, conf=0.8)
     detections = []
     for result in results:
         for box in result.boxes:
