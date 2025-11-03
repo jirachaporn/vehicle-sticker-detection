@@ -4,20 +4,22 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from ..db.supabase_client import get_supabase_client
+import re
 
 router = APIRouter()
 
 TH_TZ = ZoneInfo("Asia/Bangkok")
 
-def _to_th_datetime_str(iso_time: Optional[str]) -> Optional[str]:
-    if not iso_time:
+def _to_db_timestamp_seconds(ts: Optional[str]) -> Optional[str]:
+    if not ts:
         return None
-    if iso_time.endswith("Z"):
-        iso_time = iso_time.replace("Z", "+00:00")
-    dt = datetime.fromisoformat(iso_time)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-    return dt.astimezone(TH_TZ).strftime("%Y-%m-%d %H:%M:%S")
+    s = str(ts).replace("T", " ")
+    m = re.match(r"^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})", s)
+    if m:
+        return m.group(1)
+    s = re.sub(r"\.\d+", "", s)           
+    s = re.sub(r"(Z|[+-]\d{2}:\d{2})$", "", s)
+    return s.strip()
 
 def _parse_province(raw: Optional[str]) -> Optional[str]:
     if not raw:
@@ -117,7 +119,7 @@ def list_table_records(
             "type_car": plate.get("vehicle_body_type"),
             "vehicle_color": plate.get("vehicle_color"),
             "location": location_name,
-            "timestamp": _to_th_datetime_str(r.get("detected_at")),
+            "timestamp": _to_db_timestamp_seconds(r.get("detected_at")),
             "actions": _first_image(r.get("image_path")),
             "direction": r.get("direction"),
             "sticker": bool(r.get("is_sticker")),
