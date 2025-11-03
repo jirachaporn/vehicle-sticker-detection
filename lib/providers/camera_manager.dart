@@ -7,23 +7,22 @@ class CameraManager extends ChangeNotifier {
   bool isInitialized = false;
   String? locationId;
   String? modelId;
-  bool _detecting = false;
+  bool detecting = false;
 
   Future<void> init(List<CameraDescription> cameras) async {
     if (cameras.isEmpty) return;
 
-    // 🎯 กรอง HP Wide Vision ออกก่อน
     final filteredCams = cameras.where((cam) {
       return !cam.name.toLowerCase().contains('hp wide vision');
     }).toList();
 
-    // ✅ ใช้ได้สูงสุด 2 กล้อง
+    // ใช้ได้สูงสุด 2 กล้อง
     final camsToUse = filteredCams.length > 2
         ? filteredCams.sublist(0, 2)
         : filteredCams;
 
     if (camsToUse.isEmpty) {
-      debugPrint('⚠️ No external webcam found after filtering');
+      debugPrint('No external webcam found after filtering');
       return;
     }
 
@@ -39,7 +38,7 @@ class CameraManager extends ChangeNotifier {
       final controller = CameraController(camera, ResolutionPreset.medium);
       await controller.initialize();
       controllers[i] = controller;
-      debugPrint('✅ Initialized camera $i: ${camera.name}');
+      debugPrint('Initialized camera $i: ${camera.name}');
     }
 
     isInitialized = true;
@@ -54,38 +53,46 @@ class CameraManager extends ChangeNotifier {
 
   void startDetection() {
     if (!isInitialized || locationId == null || modelId == null) return;
-    if (_detecting) return;
-    _detecting = true;
-    _detectLoop();
+    if (detecting) return;
+    detecting = true;
+    detectLoop();
   }
 
   void stopDetection() {
-    _detecting = false;
+    detecting = false;
     for (var controller in controllers.values) {
       controller.dispose();
     }
     controllers.clear();
   }
 
-  void _detectLoop() async {
-    while (_detecting && locationId != null && modelId != null) {
+  void detectLoop() async {
+    while (detecting && locationId != null && modelId != null) {
       try {
-        for (var controller in controllers.values) {
+        for (var entry in controllers.entries) {
+          final index = entry.key;
+          final controller = entry.value;
+
           if (controller.value.isInitialized) {
             final image = await controller.takePicture();
             final bytes = await image.readAsBytes();
-
+            final direction = index == 0 ? 'in' : 'out';
             await ApiService.detectVehicleFrom(
               bytes,
               locationId: locationId!,
               modelId: modelId!,
-              direction: 'in',
+              direction: direction,
+            );
+
+            debugPrint(
+              'Camera $index sent detection with direction: $direction',
             );
           }
         }
       } catch (e) {
         debugPrint('Camera detection error: $e');
       }
+
       await Future.delayed(const Duration(seconds: 1));
     }
   }
