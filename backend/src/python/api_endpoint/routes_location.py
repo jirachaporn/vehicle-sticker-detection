@@ -6,11 +6,9 @@ from ..api_service.locations import (
     get_locations,
     save_location,
     update_location,
-    delete_location,
-)
+    delete_location)
 
 router = APIRouter()
-
 
 # ---------- Models ----------
 class LocationItem(BaseModel):

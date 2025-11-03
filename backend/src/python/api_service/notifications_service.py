@@ -1,33 +1,28 @@
 # api_services/notifications_service.py สร้าง/อ่าน/อัปเดต Notification ตรวจทะเบียนกับสถานที่, ส่งเข้ากติกา, เขียนแจ้งเตือนลง DB, เตรียมเมธอดให้ API 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, Optional
 from ..db.supabase_client import get_supabase_client
-from ..utils.notify_rules import classify_notification, STATUS_NEW, STATUS_READ, STATUS_DISMISSED
+from ..utils.notify_rules import classify_notification, STATUS_NEW, STATUS_READ
+from zoneinfo import ZoneInfo   
 
-_TH_NUM_MAP = str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789")
+TH_NUM_MAP = str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789")
+TH_TZ = ZoneInfo("Asia/Bangkok")  
 
-def _norm_lp(s: Optional[str]) -> Optional[str]: # แปลงเลขไทยเป็นอารบิก
+def norm_lp(s: Optional[str]) -> Optional[str]:
     if not s:
         return None
     x = s.strip().replace(" ", "")
-    x = x.translate(_TH_NUM_MAP)   
+    x = x.translate(TH_NUM_MAP)   
     return x.upper()
-
-def _norm_province(s: Optional[str]) -> Optional[str]: # Norm ชื่อจังหวัด
+def th_now_str() -> str: 
+    return datetime.now(TH_TZ).replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
+def norm_province(s: Optional[str]) -> Optional[str]: # Norm ชื่อจังหวัด
     if not s:
         return None
     return s.strip()
 
-def _now_iso():
-    return datetime.now(timezone.utc).isoformat()
-
-def _resolve_registration_for_detection(detection_row: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    1) แปลง location_id → location_license
-    2) ถ้า OCR ได้แผ่นป้าย + จังหวัด → เช็คตาราง license_plate ว่ามี record ที่ location_license เดียวกันไหม
-       - แมตช์แบบ strict: (location_license, license_text, license_local) ครบ
-       - ถ้าไม่เจอ ลองผ่อน: แมตช์ plate อย่างเดียว (province อาจอ่านผิด) → ระบุ match_policy='plate_only'
-    """
+def resolve_registration_for_detection(detection_row: Dict[str, Any]) -> Dict[str, Any]:
+    # ตรวจว่าเลขป้าย + จังหวัด ที่ OCR ได้ ตรงกับตาราง license_plate ของสถานที่นั้นหรือไม่
     sb = get_supabase_client()
 
     # 1) ดึง location_license
@@ -42,8 +37,8 @@ def _resolve_registration_for_detection(detection_row: Dict[str, Any]) -> Dict[s
     status = dp.get("status")
     raw_lp = dp.get("lp_number")
     raw_prov = dp.get("province")
-    norm_lp = _norm_lp(raw_lp)
-    norm_prov = _norm_province(raw_prov)
+    norm_lp = norm_lp(raw_lp)
+    norm_prov = norm_province(raw_prov)
 
     # ถ้าอ่านป้ายไม่ได้ จะ ไม่มีสิทธิ์ยืนยันว่า registered
     if status != 200 or not norm_lp:
@@ -58,8 +53,7 @@ def _resolve_registration_for_detection(detection_row: Dict[str, Any]) -> Dict[s
     # 3) เช็ค strict: plate + province
     strict = (
         sb.table("license_plate").select("license_id, license_text, license_local")
-        .eq("location_license", location_license)
-        .eq("license_text", norm_lp)
+        .eq("location_license", location_license).eq("license_text", norm_lp)
         .eq("license_local", norm_prov if norm_prov else "").execute()).data or []
 
     if strict:
@@ -71,7 +65,7 @@ def _resolve_registration_for_detection(detection_row: Dict[str, Any]) -> Dict[s
             "match_policy": "strict"
         }
 
-    # 4) ผ่อน: plate อย่างเดียว (กรณี province อ่านผิด/เว้นว่าง)
+    # 4) plate อย่างเดียว (กรณี province อ่านผิด/เว้นว่าง)
     loose = (
         sb.table("license_plate").select("license_id")
         .eq("location_license", location_license).eq("license_text", norm_lp).execute()).data or []
@@ -93,9 +87,11 @@ def _resolve_registration_for_detection(detection_row: Dict[str, Any]) -> Dict[s
         "matched_license_id": None,
         "match_policy": "none"
     }
+# ถ้าตรงทั้งป้าย+จังหวัด → match_policy='strict'
+# ถ้าตรงเฉพาะป้าย → match_policy='plate_only'
 
 def create_from_detection(detection_row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    reg = _resolve_registration_for_detection(detection_row)
+    reg = resolve_registration_for_detection(detection_row)
 
     # ส่งผลตรวจสิทธิ์เข้า rule
     rule = classify_notification(
@@ -121,78 +117,79 @@ def create_from_detection(detection_row: Dict[str, Any]) -> Optional[Dict[str, A
     }
     res = sb.table("notifications").insert(payload).execute()
     return (res.data or [None])[0]
+# ได้ severity/title/message/meta แล้ว insert แถวใหม่ใน notifications
 #####################################################################################################
+
 def list_notifications(
     location_id: str,
     status: Optional[str] = None,
-    limit: int = 20,
-    offset: int = 0,
     severity: Optional[str] = None) -> Dict[str, Any]:
     sb = get_supabase_client()
     q = sb.table("notifications").select("*", count="exact").eq("location_id", location_id)
 
-    if status and status.lower() != "all":
-        q = q.eq("notification_status", status.lower())
+    # if status and status.lower() != "all":
+    #     q = q.eq("notification_status", status.lower())
+    
+    if status == "new":
+        q = q.eq("notification_status", "new").eq("is_read", False) 
+    elif status == "read":
+        q = q.eq("notification_status", "read").eq("is_read", True)
 
     if severity:
         q = q.eq("severity", severity.lower())
 
-    q = q.order("created_at", desc=True).range(offset, offset + limit - 1)
+    q = q.order("created_at", desc=True)
     data = q.execute()
     items = data.data or []
     total = data.count or 0
 
-    # นับ unread เพื่อขึ้น badge
     unread = (
-        sb.table("notifications")
-        .select("notifications_id", count="exact")
-        .eq("location_id", location_id)
-        .eq("notification_status", STATUS_NEW)
-        .execute()).count or 0
-    return {"items": items, "total": total, "unread_count": unread}
+        sb.table("notifications").select("notifications_id", count="exact")
+        .eq("location_id", location_id).eq("notification_status", STATUS_NEW).execute()).count or 0
+    return {"items": items, 
+            "total": total, 
+            "unread_count": unread}
 #####################################################################################################
 
 def summary(location_id: str) -> Dict[str, Any]:
     sb = get_supabase_client()
-    unread = (
-        sb.table("notifications").select("notifications_id", count="exact")
+    unread = (sb.table("notifications").select("notifications_id", count="exact")
         .eq("location_id", location_id).eq("notification_status", STATUS_NEW).execute()).count or 0
 
     # สรุปตาม severity
     by_sev = {}
     for sev in ["info", "warning", "critical"]:
-        by_sev[sev] = (
-            sb.table("notifications").select("notifications_id", count="exact")
+        by_sev[sev] = (sb.table("notifications").select("notifications_id", count="exact")
             .eq("location_id", location_id).eq("notification_status", STATUS_NEW).eq("severity", sev)
             .execute()).count or 0
-    return {"unread": unread, "by_severity": by_sev}
+    return {"unread": unread, 
+            "by_severity": by_sev } 
+#return 
+#     "unread": 0,
+#     "by_severity": {
+#         "info": 0,
+#         "warning": 0,
+#         "critical": 0 }
 #####################################################################################################
-
+# mark a notification as read
 def mark_read(notification_id: str) -> Dict[str, Any]:
     sb = get_supabase_client()
-    res = (
-        sb.table("notifications")
-        .update({"is_read": True, "read_at": _now_iso(), "notification_status": STATUS_READ})
-        .eq("notifications_id", notification_id)
-        .execute())
+    res = (sb.table("notifications")
+        .update({
+            "is_read": True,
+            "read_at": th_now_str(),              
+            "notification_status": STATUS_READ}).eq("notifications_id", notification_id).execute())
     return (res.data or [None])[0] or {}
 #####################################################################################################
-
-def dismiss(notification_id: str) -> Dict[str, Any]:
-    sb = get_supabase_client()
-    res = (
-        sb.table("notifications")
-        .update({"notification_status": STATUS_DISMISSED})
-        .eq("notifications_id", notification_id)
-        .execute())
-    return (res.data or [None])[0] or {}
-#####################################################################################################
-
+# mark all notifications as read
 def mark_all_read(location_id: str, type_filter: Optional[str] = None) -> int:
     sb = get_supabase_client()
-    q = sb.table("notifications").update({"is_read": True, "read_at": _now_iso(), "notification_status": STATUS_READ}) \
-                                .eq("location_id", location_id) \
-                                .eq("notification_status", STATUS_NEW)
+    q = (sb.table("notifications")
+        .update({
+            "is_read": True,
+            "read_at": th_now_str(),     
+            "notification_status": STATUS_READ})
+        .eq("location_id", location_id).eq("notification_status", STATUS_NEW))
     if type_filter and type_filter != "ALL":
         q = q.eq("title", type_filter)
     res = q.execute()
