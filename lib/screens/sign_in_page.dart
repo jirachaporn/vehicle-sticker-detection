@@ -185,7 +185,7 @@ class _SignInPageState extends State<SignInPage> {
                   TextField(
                     controller: _usernameOrEmailController,
                     decoration: InputDecoration(
-                      labelText: 'Username or Email',
+                      labelText: 'Email',
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                         borderSide: const BorderSide(color: Color(0xFF949494)),

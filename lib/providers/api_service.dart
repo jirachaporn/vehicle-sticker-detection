@@ -179,7 +179,7 @@ class ApiService {
   Future<bool> deleteNotification(String notificationId) async {
     try {
       final response = await http.delete(
-        Uri.parse('$baseUrl/notifications/delete_location/$notificationId'),
+        Uri.parse('$baseUrl/notifications/delete/$notificationId'),
       );
       return response.statusCode == 200;
     } catch (e) {

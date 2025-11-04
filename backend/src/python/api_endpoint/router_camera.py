@@ -106,7 +106,7 @@ def _match_tracks(tracks: Dict[str, dict], dets: List[Dict[str, Any]], iou_thr: 
             del tracks[tid]
 
 ###################################################################################
-@router.post("/car-capture-stream")
+@router.post("/car-detect")
 def car_capture_stream(
     source: str = Form(...),     # "0" (webcam) หรือ path/URL วิดีโอ
     location_id: str = Form(...),

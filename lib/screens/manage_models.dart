@@ -63,7 +63,6 @@ class _ManageModelsState extends State<ManageModels> {
   }
 
   void handleActivate(String modelId) async {
-    debugPrint('🧨 Deleting model_id: $modelId');
     final supabase = Supabase.instance.client;
     setState(() => isLoading = true);
 
@@ -76,11 +75,12 @@ class _ManageModelsState extends State<ManageModels> {
       await supabase
           .from('model')
           .update({'is_active': true})
-          .eq('id', modelId);
+          .eq('model_id', modelId);
 
       await fetchStickerModels();
     } catch (e) {
-      showFailMessage(context,'Activate Model Failed', e.toString());
+      debugPrint('Activate Model Failed ${e.toString()}');
+      showFailMessage(context, 'Activate Model Failed', e.toString());
     } finally {
       setState(() => isLoading = false);
     }
@@ -223,7 +223,7 @@ class _ManageModelsState extends State<ManageModels> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 24),
-        const Text(
+        Text(
           'Currently Active Model',
           style: TextStyle(
             fontSize: 20,
@@ -231,6 +231,16 @@ class _ManageModelsState extends State<ManageModels> {
             color: Color(0xFF1F2937),
           ),
         ),
+        const SizedBox(height: 4),
+        Text(
+          'If you change the active model, please reload the location data to update the system',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w400,
+            color: Colors.black54,
+          ),
+        ),
+
         const SizedBox(height: 16),
         StickerCard(
           model: activeModel!,

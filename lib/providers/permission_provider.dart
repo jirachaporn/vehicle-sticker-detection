@@ -1,4 +1,4 @@
-import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/permission.dart';
@@ -8,7 +8,7 @@ class PermissionProvider with ChangeNotifier {
 
   String get currentEmail {
     final e = (supa.auth.currentUser?.email ?? '').toLowerCase();
-    return e.isNotEmpty ? e : 'vdowduang@gmail.com'; 
+    return e.isNotEmpty ? e : 'vdowduang@gmail.com';
   }
 
   final Map<String, List<PermissionMember>> cacheByLocation = {};
@@ -199,11 +199,19 @@ class PermissionProvider with ChangeNotifier {
     String? inviteName,
   }) async {
     final emailLc = inviteEmail.trim().toLowerCase();
+
+    // 🔹 ตรวจสอบอีเมล
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
+    if (!emailRegex.hasMatch(emailLc)) {
+      throw Exception("Invalid email address");
+    }
+
     final nowIso = DateTime.now()
         .toUtc()
         .add(const Duration(hours: 7))
         .toIso8601String();
 
+    // ตรวจสอบซ้ำใน location_members
     final existing = await supa
         .from('location_members')
         .select('member_email')
@@ -215,6 +223,7 @@ class PermissionProvider with ChangeNotifier {
       throw Exception("This email is already a member of this location.");
     }
 
+    // insert ลง permission_log
     final ins = await supa
         .from('permission_log')
         .insert({
@@ -224,38 +233,54 @@ class PermissionProvider with ChangeNotifier {
               ? 'Unknown'
               : inviteName!.trim(),
           'permission': permission,
-          'status': 'pending',
+          'status': 'invited',
           'by_email': currentEmail,
           'created_at': nowIso,
         })
         .select('permission_log_id')
         .single();
 
-    final payload = {
-      'email': emailLc,
-      'locationId': locationId,
-      'permission': permission,
-      'name': inviteName,
-      'permissionLogId': ins['permission_log_id'],
-      'ts': DateTime.now().millisecondsSinceEpoch,
-    };
-    final jsonStr = jsonEncode(payload);
-    final token = base64Url.encode(utf8.encode(jsonStr)).replaceAll('=', '');
-    return token;
+    // ✅ return permission_log_id ตรงๆ
+    return ins['permission_log_id'] as String;
   }
 
-  Future<bool> confirmInvite(String token) async {
+  Future<bool> confirmInvite(String permissionLogId) async {
     try {
-      final payload = _decodeBase64UrlToJson(token);
-      final emailLc = (payload['email'] as String).toLowerCase();
-      final locationId = payload['locationId'] as String;
-      final permDb = payload['permission'] as String;
+      final existing = await supa
+          .from('permission_log')
+          .select('member_email, member_name, location_id, permission')
+          .eq('permission_log_id', permissionLogId)
+          .maybeSingle();
 
-      await supa.from('location_members').upsert({
+      if (existing == null) {
+        debugPrint('confirmInvite error: invitation not found');
+        return false;
+      }
+
+      final emailLc = (existing['member_email'] as String).toLowerCase();
+      final locationId = existing['location_id'] as String;
+      final name = existing['member_name'] as String?;
+      final permDb = existing['permission'] as String;
+
+      // เช็คซ้ำก่อน insert
+      final already = await supa
+          .from('location_members')
+          .select('member_email')
+          .eq('member_email', emailLc)
+          .eq('location_id', locationId)
+          .maybeSingle();
+
+      if (already != null) {
+        debugPrint('ℹconfirmInvite: already confirmed');
+        return true;
+      }
+
+      await supa.from('location_members').insert({
         'location_id': locationId,
         'member_email': emailLc,
+        'member_name': name ?? 'Unknown',
         'member_permission': permDb,
-      }, onConflict: 'location_id,member_email');
+      });
 
       await loadMembers(locationId);
       return true;
@@ -263,12 +288,5 @@ class PermissionProvider with ChangeNotifier {
       debugPrint('❌ confirmInvite error: $e\n$st');
       return false;
     }
-  }
-
-  Map<String, dynamic> _decodeBase64UrlToJson(String token) {
-    final clean = token.replaceAll(RegExp(r'\s'), '');
-    final pad = clean.length % 4 == 0 ? '' : '=' * (4 - (clean.length % 4));
-    final bytes = base64Url.decode(clean + pad);
-    return jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
   }
 }

@@ -67,8 +67,8 @@ class _FileUploadState extends State<FileUpload> {
       return '$fileName: Only PNG and JPG files are allowed';
     }
 
-    if (bytes.lengthInBytes > 5 * 1024 * 1024) {
-      return '$fileName: File size must be less than 5MB';
+    if (bytes.lengthInBytes > 30 * 1024 * 1024) {
+      return '$fileName: File size must be less than 30MB';
     }
 
     return null;
@@ -178,7 +178,7 @@ class _FileUploadState extends State<FileUpload> {
       });
     }
 
-    if (selectedFiles.length < 10 || totalSize > 5 * 1024 * 1024) {
+    if (selectedFiles.length < 20 || totalSize > 30 * 1024 * 1024) {
       debugPrint(
         '❌ File validation failed: ${selectedFiles.length} files, $totalSize bytes',
       );
@@ -195,7 +195,7 @@ class _FileUploadState extends State<FileUpload> {
     }
 
     try {
-      final uri = Uri.parse("$baseUrl/model/upload");
+      final uri = Uri.parse("$baseUrl/upload/sticker-model");
       final request = http.MultipartRequest("POST", uri);
       request.fields['model_name'] = modelName;
       request.fields['location_id'] = widget.locationId;
@@ -327,7 +327,7 @@ class _FileUploadState extends State<FileUpload> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'PNG or JPG files, max 5MB each. Minimum 5 images required. Total size must not exceed 5MB.',
+                      'PNG or JPG files, Minimum 20 images required. Total size must not exceed 30MB.',
                       style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
                       textAlign: TextAlign.center,
                     ),
@@ -521,22 +521,22 @@ class _FileUploadState extends State<FileUpload> {
             Row(
               children: [
                 Text(
-                  selectedFiles.length < 10
-                      ? '${10 - selectedFiles.length} more images needed'
+                  selectedFiles.length < 20
+                      ? '${20 - selectedFiles.length} more images needed'
                       : selectedFiles.fold(0, (sum, file) => sum + file.size) >
-                            5 * 1024 * 1024
-                      ? 'Total size exceeds 5MB'
+                            30 * 1024 * 1024
+                      ? 'Total size exceeds 30MB'
                       : 'Ready to upload!',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                     color:
-                        (selectedFiles.length >= 10 &&
+                        (selectedFiles.length >= 20 &&
                             selectedFiles.fold(
                                   0,
                                   (sum, file) => sum + file.size,
                                 ) <=
-                                5 * 1024 * 1024)
+                                30 * 1024 * 1024)
                         ? const Color(0xFF059669)
                         : const Color(0xFFE4960F),
                   ),
@@ -544,22 +544,22 @@ class _FileUploadState extends State<FileUpload> {
                 const SizedBox(width: 8),
 
                 Icon(
-                  (selectedFiles.length >= 5 &&
+                  (selectedFiles.length >= 20 &&
                           selectedFiles.fold(
                                 0,
                                 (sum, file) => sum + file.size,
                               ) <=
-                              5 * 1024 * 1024)
+                              30 * 1024 * 1024)
                       ? Icons.check_circle
                       : Icons.warning,
                   size: 16,
                   color:
-                      (selectedFiles.length >= 5 &&
+                      (selectedFiles.length >= 20 &&
                           selectedFiles.fold(
                                 0,
                                 (sum, file) => sum + file.size,
                               ) <=
-                              5 * 1024 * 1024)
+                              30 * 1024 * 1024)
                       ? const Color(0xFF059669)
                       : const Color(0xFFE4960F),
                 ),
@@ -618,8 +618,8 @@ class _FileUploadState extends State<FileUpload> {
                                       0,
                                       (sum, file) => sum + file.size,
                                     ) >
-                                    5 * 1024 * 1024
-                                ? const Color(0xFFEF4444) // สีแดงถ้าเกิน 5MB
+                                    30 * 1024 * 1024
+                                ? const Color(0xFFEF4444)
                                 : const Color(0xFF6B7280),
                           ),
                         ),
@@ -627,9 +627,9 @@ class _FileUploadState extends State<FileUpload> {
                               0,
                               (sum, file) => sum + file.size,
                             ) >
-                            5 * 1024 * 1024)
+                            30 * 1024 * 1024)
                           const Text(
-                            ' (Exceeds 5MB)',
+                            ' (Exceeds 30MB)',
                             style: TextStyle(
                               fontSize: 12,
                               color: Color(0xFFEF4444),
@@ -641,13 +641,13 @@ class _FileUploadState extends State<FileUpload> {
                     const SizedBox(width: 12),
                     ElevatedButton(
                       onPressed:
-                          (selectedFiles.length >= 5 &&
+                          (selectedFiles.length >= 20 &&
                               !widget.isUploading &&
                               selectedFiles.fold(
                                     0,
                                     (sum, file) => sum + file.size,
                                   ) <=
-                                  5 * 1024 * 1024)
+                                  30 * 1024 * 1024)
                           ? handleUpload
                           : null,
                       style: ElevatedButton.styleFrom(
@@ -700,8 +700,8 @@ class _FileUploadState extends State<FileUpload> {
   Widget buildUsageInstructions() {
     final instructions = [
       'Model accuracy depends on the quality and variety of the uploaded images **',
-      'Upload at least 10 high-quality images (PNG or JPG format) from multiple angles',
-      'Total size of all images must not exceed 5MB',
+      'Upload at least 20 high-quality images (PNG or JPG format) from multiple angles',
+      'Total size of all images must not exceed 30MB',
       'Only one model can be active at a time',
       'You can reactivate previous models at any time',
       'Crop images to show only the sticker area and take photos from multiple angles',

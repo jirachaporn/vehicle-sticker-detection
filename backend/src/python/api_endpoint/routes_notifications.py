@@ -45,7 +45,7 @@ def api_mark_all_read(body: MarkAllBody):
     updated = mark_all_read(body.location_id, body.type)
     return {"updated": updated}
 
-@router.delete("/delete_location/{notification_id}")
+@router.delete("/delete/{notification_id}")
 def delete_notification(notification_id: str):
     return mark_delete_notification(notification_id)
 

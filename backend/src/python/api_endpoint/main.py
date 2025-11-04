@@ -14,6 +14,7 @@ from .router_email import router as email_router
 from .router_camera import router as camera_router
 from .routes_models_noti import router as models_router
 from .routes_notifications_permission import router as permissions_router
+from .router_upload_model import router as upload_sticker
 
 
 APP_ENV = os.getenv("APP_ENV", "Development for Programer").lower()
@@ -32,6 +33,7 @@ app.include_router(locations_router, tags=["locations"])
 app.include_router(email_router, prefix="/email", tags=["email"])
 app.include_router(camera_router, prefix="/camera", tags=["camera"])
 app.include_router(models_router, prefix="/model", tags=["model"])
+app.include_router(upload_sticker, prefix="/upload", tags=["upload"])
 app.include_router(permissions_router, tags=["permissions"])
 
 @app.get("/")

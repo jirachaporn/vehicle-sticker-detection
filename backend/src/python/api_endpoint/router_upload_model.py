@@ -11,7 +11,7 @@ class UploadModelResponse(BaseModel):
     message: str
     data: dict | None = None
 
-@router.post("/upload", response_model=UploadModelResponse)
+@router.post("/sticker-model", response_model=UploadModelResponse)
 async def upload_sticker_model(
     model_name: str = Form(...),
     location_id: str = Form(...),

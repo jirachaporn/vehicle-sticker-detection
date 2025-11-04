@@ -71,13 +71,13 @@ class _PermissionPageState extends State<PermissionPage>
   Future<void> handleInvite() async {
     final provider = context.read<PermissionProvider>();
 
-    // raw สำหรับแสดงผล / email สำหรับใช้กับ DB
     final rawEmail = inviteEmailCtrl.text.trim();
     final email = rawEmail.toLowerCase();
     final name = inviteNameCtrl.text.trim();
 
-    // 0) ตรวจอีเมล
-    if (!isEmail(rawEmail)) {
+    // 🔹 ตรวจสอบอีเมล
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
+    if (!emailRegex.hasMatch(rawEmail)) {
       toast(context, 'Please enter a valid email');
       return;
     }
@@ -85,20 +85,19 @@ class _PermissionPageState extends State<PermissionPage>
     setState(() => loadingInvite = true);
 
     try {
-      // 1) ขอ token สำหรับยืนยัน (บันทึกใน permission_log เท่านั้น)
-      final token = await provider.invite(
+      // 1) ขอ permission_log_id สำหรับยืนยัน (บันทึกใน permission_log)
+      final permissionLogId = await provider.invite(
         locationId: widget.locationId,
         inviteEmail: email,
-        permission: invitePerm.toLowerCase(), // 'view' | 'edit' | 'owner'
+        permission: invitePerm.toLowerCase(),
         inviteName: name.isEmpty ? null : name,
       );
 
-      // 2) สร้างลิงก์ยืนยัน (encode token กันอักขระพิเศษ)
+      // 2) สร้างลิงก์ยืนยัน (ส่ง permission_log_id ตรงๆ)
       final baseUrlRaw = dotenv.env['SUPABASE_URL'] ?? '';
       final baseUrl = baseUrlRaw.replaceAll(RegExp(r'/$'), '');
-      final encodedToken = Uri.encodeComponent(token);
       final confirmLink =
-          '$baseUrl/functions/v1/confirm-permission?token=$encodedToken';
+          '$baseUrl/functions/v1/confirm-permission?permissionLogId=$permissionLogId';
 
       // 3) ส่งอีเมลเชิญ
       await sendInviteEmail(
@@ -108,7 +107,6 @@ class _PermissionPageState extends State<PermissionPage>
         locationName: widget.locationName,
       );
 
-      // 4) แจ้งสำเร็จ + คัดลอกลิงก์
       if (!mounted) return;
       await copyToClipboardAndDialogSuccess(
         context,
@@ -118,7 +116,7 @@ class _PermissionPageState extends State<PermissionPage>
         copyText: confirmLink,
       );
 
-      // 5) เคลียร์ฟอร์ม
+      // เคลียร์ฟิลด์หลังส่ง
       inviteEmailCtrl.clear();
       inviteNameCtrl.clear();
       setState(() => invitePerm = 'view');
@@ -138,7 +136,6 @@ class _PermissionPageState extends State<PermissionPage>
     String? invitedName,
     String? locationName,
   }) async {
-    // ปรับเป็น backend จริงของคุณ
     final endpoint = Uri.parse('$baseUrl/permission/send-permission');
 
     final res = await http.post(
@@ -156,11 +153,6 @@ class _PermissionPageState extends State<PermissionPage>
     if (res.statusCode != 200) {
       throw Exception('Failed to send email: ${res.body}');
     }
-  }
-
-  bool isEmail(String v) {
-    final re = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    return re.hasMatch(v);
   }
 
   void toast(BuildContext context, String msg) {
