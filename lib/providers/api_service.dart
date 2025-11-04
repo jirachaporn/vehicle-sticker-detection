@@ -161,13 +161,16 @@ class ApiService {
     }
   }
 
-  Future<void> markAllRead(String locationId, String type) async {
+  Future<void> markAllRead(String locationId) async {
     final url = Uri.parse('$baseUrl/notifications/mark-all-read');
+    debugPrint('locationId: $locationId');
+
     final response = await http.patch(
       url,
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'location_id': locationId, 'type': type}),
+      body: jsonEncode({'location_id': locationId, 'type': "ALL"}),
     );
+    debugPrint('Response body: ${response.body}');
     if (response.statusCode != 200) {
       throw Exception('Failed to mark all as read: ${response.statusCode}');
     }
@@ -298,7 +301,6 @@ class ApiService {
   //   final list = await addLicensePlates([plate], upsert: upsert);
   //   return list.isNotEmpty ? list.first : null;
   // }
-
 
   // Future<bool> deleteLicensePlates(List<String> licenseIds) async {
   //   if (licenseIds.isEmpty) return true;

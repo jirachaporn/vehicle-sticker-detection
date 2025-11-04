@@ -1,4 +1,4 @@
-// ===================== import =====================
+// lib/widgets/location/license/add_license_dialog.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
@@ -6,28 +6,10 @@ import 'package:uuid/uuid.dart';
 
 import '../../../models/location.dart';
 import '../../../providers/app_state.dart';
-import 'excel_import_dialog.dart';
 import '../../../providers/snackbar_func.dart';
+import 'excel_import_dialog.dart';
+import '../license/plate_row.dart';
 
-// ===================== ฟังก์ชัน (ไฟล์) =====================
-InputDecoration fieldDec(String label, {String? hint}) {
-  return InputDecoration(
-    labelText: label,
-    hintText: hint,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderSide: const BorderSide(color: Color(0xFF2563EB), width: 2),
-      borderRadius: BorderRadius.circular(12),
-    ),
-  );
-}
-
-// ===================== class (ตัวหลัก) =====================
 class AddLicenseDialog extends StatefulWidget {
   final String? locationLicense;
   final bool isEdit;
@@ -46,12 +28,11 @@ class AddLicenseDialog extends StatefulWidget {
   State<AddLicenseDialog> createState() => _AddLicenseDialogState();
 }
 
-// ===================== ตัวแปร/ฟังก์ชันใน class =====================
 class _AddLicenseDialogState extends State<AddLicenseDialog> {
   final supa = Supabase.instance.client;
   final uuid = const Uuid();
 
-  List<_PlateRowData> _rows = <_PlateRowData>[_PlateRowData()];
+  List<PlateRowData> _rows = <PlateRowData>[PlateRowData()];
   final List<String> _deletedIds = <String>[];
 
   bool _loading = false;
@@ -82,7 +63,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
       if (key == null || key.isEmpty) {
         _rows
           ..clear()
-          ..add(_PlateRowData());
+          ..add(PlateRowData());
         return;
       }
 
@@ -99,8 +80,8 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
         ..clear()
         ..addAll(
           list.isEmpty
-              ? [_PlateRowData()]
-              : list.map((m) => _PlateRowData.fromMap(m)),
+              ? [PlateRowData()]
+              : list.map((m) => PlateRowData.fromMap(m)),
         );
     } catch (e) {
       if (!mounted) return;
@@ -112,18 +93,16 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
 
   Future<void> _savePlates() async {
     setState(() => _saving = true);
-
     final appState = Provider.of<AppState>(context, listen: false);
 
     try {
-      // ===== โหมดแก้ไข =====
       if (widget.isEdit &&
           widget.locationLicense != null &&
           widget.initialLocation != null) {
         final currentLocationId = widget.initialLocation!.id;
         final currentLocationLicense = widget.locationLicense!;
 
-        // 1️⃣ UPDATE แถวเก่า
+        // UPDATE แถวเก่า
         for (final r in _rows.where((e) => e.licenseId != null)) {
           await supa
               .from('license_plate')
@@ -139,24 +118,9 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
               .select('license_id');
         }
 
-        // 2️⃣ INSERT แถวใหม่ พร้อมต่อเลข on_license
+        // INSERT แถวใหม่
         final newcomersRows = _rows.where((e) => e.licenseId == null).toList();
         if (newcomersRows.isNotEmpty) {
-          int maxOnLicense = 0;
-          final maxRes = await supa
-              .from('license_plate')
-              .select('on_license')
-              .eq('location_license', currentLocationLicense)
-              .order('on_license', ascending: false)
-              .limit(1)
-              .maybeSingle();
-          maxOnLicense = (maxRes?['on_license'] as int? ?? 0);
-
-          int nextLicense = maxOnLicense + 1;
-          for (final r in newcomersRows) {
-            r.onLicense = nextLicense++;
-          }
-
           final newcomers = newcomersRows
               .map(
                 (r) => {
@@ -171,14 +135,13 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                 },
               )
               .toList();
-
           await supa
               .from('license_plate')
               .insert(newcomers)
               .select('license_id');
         }
 
-        // 3️⃣ DELETE แถวที่ถูกลบ
+        // DELETE แถวที่ถูกลบ
         if (_deletedIds.isNotEmpty) {
           await supa
               .from('license_plate')
@@ -186,7 +149,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
               .inFilter('license_id', _deletedIds);
         }
 
-        // 4️⃣ UPDATE location ถ้ามี
+        // UPDATE location ถ้ามี
         if (widget.locationData != null) {
           await supa
               .from('locations')
@@ -195,7 +158,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
               .select('location_id');
         }
       }
-      // ===== สร้าง location ใหม่ =====
+      // สร้าง location ใหม่
       else if (widget.locationData != null) {
         final newLocationId = uuid.v4();
         final locRow = {...widget.locationData!, 'location_id': newLocationId}
@@ -211,9 +174,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
         final locationLicense = licRes?['location_license'] as String?;
         if (locationLicense == null) throw Exception('ไม่พบ location_license');
 
-        int nextLicense = 1;
         final plateRows = _rows.map((r) {
-          r.onLicense = nextLicense++;
           return {
             'location_license': locationLicense,
             'license_text': r.licenseText.text.trim(),
@@ -228,22 +189,10 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
           await supa.from('license_plate').insert(plateRows);
         }
       }
-      // ===== เพิ่มป้ายใน location ที่มีอยู่ =====
+      // เพิ่มป้ายใน location ที่มีอยู่
       else if (!widget.isEdit && widget.locationLicense != null) {
         final currentLocationLicense = widget.locationLicense!;
-
-        // ดึง max on_license จาก DB
-        final maxRes = await supa
-            .from('license_plate')
-            .select('on_license')
-            .eq('location_license', currentLocationLicense)
-            .order('on_license', ascending: false)
-            .limit(1)
-            .maybeSingle();
-        int nextLicense = (maxRes?['on_license'] as int? ?? 0) + 1;
-
         final plateRows = _rows.map((r) {
-          r.onLicense = nextLicense++;
           return {
             'location_license': currentLocationLicense,
             'license_text': r.licenseText.text.trim(),
@@ -259,7 +208,6 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
         }
       }
 
-      // รีโหลด state
       await appState.loadLocations(appState.loggedInEmail);
 
       if (!mounted) return;
@@ -278,11 +226,10 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
 
   void _addRow() {
     setState(() {
-      final nextOnLicense = _rows.isEmpty
-          ? 1
-          : _rows.map((r) => r.onLicense).reduce((a, b) => a > b ? a : b) + 1;
-
-      _rows.add(_PlateRowData(onLicense: nextOnLicense));
+      final maxOnLicense = _rows.isEmpty
+          ? 0
+          : _rows.map((r) => r.onLicense).reduce((a, b) => a > b ? a : b);
+      _rows.add(PlateRowData(onLicense: maxOnLicense + 1));
     });
   }
 
@@ -302,7 +249,6 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
     setState(() {});
   }
 
-  // ===================== Widget หลัก =====================
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -314,8 +260,8 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
       child: Theme(
         data: theme.copyWith(
           colorScheme: theme.colorScheme.copyWith(
-            primary: Color(0xFF2563EB),
-            secondary: Color(0xFF2563EB),
+            primary: const Color(0xFF2563EB),
+            secondary: const Color(0xFF2563EB),
           ),
           inputDecorationTheme: theme.inputDecorationTheme.copyWith(
             focusedBorder: const OutlineInputBorder(
@@ -355,8 +301,6 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                           ),
                         ),
                         const Spacer(),
-
-                        // ==== ปุ่มอัพโหลด Excel ====
                         OutlinedButton.icon(
                           onPressed: () async {
                             final result =
@@ -364,11 +308,16 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                                   context: context,
                                   builder: (_) => const ExcelImportDialog(),
                                 );
-
                             if (result != null &&
                                 result.isNotEmpty &&
                                 mounted) {
                               setState(() {
+                                final maxOnLicense = _rows.isEmpty
+                                    ? 0
+                                    : _rows
+                                          .map((r) => r.onLicense)
+                                          .reduce((a, b) => a > b ? a : b);
+
                                 if (_rows.isEmpty ||
                                     _rows.every(
                                       (r) =>
@@ -377,10 +326,10 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                                           r.carOwner.text.isEmpty &&
                                           r.note.text.isEmpty,
                                     )) {
-                                  // ถ้าไม่มีข้อมูล หรือทุกช่องว่าง ให้แทนที่ด้วย result ใหม่เลย
+                                  int nextLicense = 1;
                                   _rows = result
                                       .map(
-                                        (m) => _PlateRowData(
+                                        (m) => PlateRowData(
                                           licenseText: TextEditingController(
                                             text: m['license_text'] ?? '',
                                           ),
@@ -393,14 +342,15 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                                           note: TextEditingController(
                                             text: m['note'] ?? '',
                                           ),
+                                          onLicense: nextLicense++,
                                         ),
                                       )
                                       .toList();
                                 } else {
-                                  // ถ้ามีข้อมูลแล้ว ให้เพิ่มต่อท้ายตามปกติ
+                                  int nextLicense = maxOnLicense + 1;
                                   _rows.addAll(
                                     result.map(
-                                      (m) => _PlateRowData(
+                                      (m) => PlateRowData(
                                         licenseText: TextEditingController(
                                           text: m['license_text'] ?? '',
                                         ),
@@ -413,6 +363,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                                         note: TextEditingController(
                                           text: m['note'] ?? '',
                                         ),
+                                        onLicense: nextLicense++,
                                       ),
                                     ),
                                   );
@@ -423,17 +374,11 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                           icon: const Icon(Icons.upload_file),
                           label: const Text('Upload Excel'),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: const Color(
-                              0xFF217346,
-                            ), // ตัวอักษร + ไอคอน
-                            side: const BorderSide(
-                              color: Color(0xFF217346),
-                            ), // เส้นขอบ
+                            foregroundColor: const Color(0xFF217346),
+                            side: const BorderSide(color: Color(0xFF217346)),
                           ),
                         ),
-
                         const SizedBox(width: 8),
-
                         IconButton(
                           onPressed: () => Navigator.of(context).pop(),
                           icon: const Icon(Icons.close),
@@ -441,7 +386,6 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 6),
                     const Align(
                       alignment: Alignment.centerLeft,
@@ -458,7 +402,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                         child: Column(
                           children: List.generate(_rows.length, (i) {
                             final row = _rows[i];
-                            return _PlateNumberRow(
+                            return PlateRow(
                               displayIndex: row.onLicense,
                               data: row,
                               onRemove: () => _removeRow(i),
@@ -478,11 +422,10 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                         icon: const Icon(Icons.add_circle_outline),
                         label: const Text('Add'),
                         style: TextButton.styleFrom(
-                          foregroundColor: Color(0xFF2563EB),
+                          foregroundColor: const Color(0xFF2563EB),
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 8),
 
                     Row(
@@ -494,9 +437,11 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                               padding: const WidgetStatePropertyAll(
                                 EdgeInsets.symmetric(vertical: 16),
                               ),
-                              shape: WidgetStatePropertyAll(
+                              shape: const WidgetStatePropertyAll(
                                 RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.all(
+                                    Radius.circular(16),
+                                  ),
                                 ),
                               ),
                               foregroundColor: const WidgetStatePropertyAll(
@@ -509,12 +454,11 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                             child: const Text('Cancel'),
                           ),
                         ),
-
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Color(0xFF2563EB),
+                              backgroundColor: const Color(0xFF2563EB),
                               foregroundColor: Colors.white,
                             ),
                             onPressed: _saving
@@ -536,181 +480,6 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
                     ),
                   ],
                 ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlateRowData {
-  final String? licenseId; // null = แถวใหม่
-  final TextEditingController licenseText;
-  final TextEditingController licenseLocal;
-  final TextEditingController carOwner;
-  final TextEditingController note;
-  int onLicense; // <-- เพิ่มตรงนี้
-
-  _PlateRowData({
-    this.licenseId,
-    TextEditingController? licenseText,
-    TextEditingController? licenseLocal,
-    TextEditingController? carOwner,
-    TextEditingController? note,
-    this.onLicense = 1, // default 1
-  }) : licenseText = licenseText ?? TextEditingController(),
-       licenseLocal = licenseLocal ?? TextEditingController(),
-       carOwner = carOwner ?? TextEditingController(),
-       note = note ?? TextEditingController();
-
-  bool get isValid =>
-      licenseText.text.trim().isNotEmpty &&
-      licenseLocal.text.trim().isNotEmpty &&
-      carOwner.text.trim().isNotEmpty;
-
-  factory _PlateRowData.fromMap(Map<String, dynamic> m) {
-    return _PlateRowData(
-      licenseId: m['license_id'] as String?,
-      licenseText: TextEditingController(text: m['license_text'] ?? ''),
-      licenseLocal: TextEditingController(text: m['license_local'] ?? ''),
-      carOwner: TextEditingController(text: m['car_owner'] ?? ''),
-      note: TextEditingController(text: m['note'] ?? ''),
-      onLicense: (m['on_license'] as int?) ?? 1, // ดึงจาก DB
-    );
-  }
-
-  void dispose() {
-    licenseText.dispose();
-    licenseLocal.dispose();
-    carOwner.dispose();
-    note.dispose();
-  }
-}
-
-class _PlateNumberRow extends StatelessWidget {
-  final int displayIndex;
-  final _PlateRowData data;
-  final VoidCallback onRemove;
-  final VoidCallback onChanged;
-
-  const _PlateNumberRow({
-    required this.displayIndex,
-    required this.data,
-    required this.onRemove,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          // ใช้ค่า radius ตรง ๆ กันเคสชื่อหาย
-          borderRadius: BorderRadius.circular(16.0),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-          boxShadow: const [
-            BoxShadow(
-              blurRadius: 10,
-              offset: Offset(0, 2),
-              color: Color(0x0F000000),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // เลขลำดับ
-            Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: const Color(0xFFDBEAFE)),
-              ),
-              child: Text(
-                '$displayIndex',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-            const SizedBox(width: 12),
-
-            // ฟอร์ม
-            Expanded(
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: data.licenseText,
-                          decoration: fieldDec(
-                            'เลขทะเบียน *',
-                            hint: 'e.g. 1กก1234',
-                          ),
-                          onChanged: (_) => onChanged(),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: data.licenseLocal,
-                          decoration: fieldDec(
-                            'จังหวัด *',
-                            hint: 'e.g. กรุงเทพมหานคร',
-                          ),
-                          onChanged: (_) => onChanged(),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: data.carOwner,
-                          decoration: fieldDec(
-                            'ชื่อเจ้าของ *',
-                            hint: 'e.g. นายเอ',
-                          ),
-                          onChanged: (_) => onChanged(),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: data.note,
-                          decoration: fieldDec(
-                            'หมายเหตุ',
-                            hint: 'เช่น ห้อง B-1203',
-                          ),
-                          onChanged: (_) => onChanged(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(width: 8),
-
-            // ปุ่มล่างสุด
-            Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                IconButton(
-                  tooltip: 'Delete row',
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                ),
-              ],
-            ),
-          ],
         ),
       ),
     );

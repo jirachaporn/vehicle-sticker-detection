@@ -31,7 +31,7 @@ app.include_router(permission_router, prefix="/permission", tags=["permission"])
 app.include_router(locations_router, tags=["locations"])
 app.include_router(email_router, prefix="/email", tags=["email"])
 app.include_router(camera_router, prefix="/camera", tags=["camera"])
-app.include_router(models_router, tags=["models"])
+app.include_router(models_router, prefix="/model", tags=["model"])
 app.include_router(permissions_router, tags=["permissions"])
 
 @app.get("/")

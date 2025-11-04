@@ -10,8 +10,10 @@ SUPABASE_SERVICE_ROLE = os.getenv("SUPABASE_SERVICE_ROLE")
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE)
 executor = ThreadPoolExecutor(max_workers=3)
 
+
 def _generate_otp(length=4):
     return ''.join(random.choices(string.digits, k=length))
+
 
 def create_and_send_signup_otp(email: str) -> tuple[bool, str]:
     """สร้าง OTP สำหรับสมัครและบันทึกลง otp_log"""
@@ -19,14 +21,14 @@ def create_and_send_signup_otp(email: str) -> tuple[bool, str]:
         return False, "Email is required"
 
     otp = _generate_otp()
-    expires_at = (datetime.utcnow() + timedelta(minutes=5)).isoformat() + "Z"  # ✅ timezone ปลอดภัยกว่า
+    expires_at = (datetime.utcnow() + timedelta(minutes=5)).isoformat() + "Z"
 
     try:
         record = {
             "by_email": email,
             "otp_code": otp,
-            "reset_used": False,
-            "reset_success": False,
+            "otp_used": False,
+            "otp_success": False,
             "expires_at": expires_at,
             "otp_type": "sign_up"
         }
@@ -45,6 +47,7 @@ def create_and_send_signup_otp(email: str) -> tuple[bool, str]:
         print(f"🔥 Error creating signup OTP: {e}")
         return False, str(e)
 
+
 def verify_signup_otp(email: str, otp: str) -> tuple[bool, str]:
     """ตรวจสอบ OTP สำหรับ sign up"""
     try:
@@ -53,7 +56,7 @@ def verify_signup_otp(email: str, otp: str) -> tuple[bool, str]:
             .select("otp_id") \
             .eq("by_email", email) \
             .eq("otp_code", otp) \
-            .eq("reset_used", False) \
+            .eq("otp_used", False) \
             .eq("otp_type", "sign_up") \
             .gt("expires_at", now) \
             .order("created_at", desc=True) \
@@ -67,8 +70,8 @@ def verify_signup_otp(email: str, otp: str) -> tuple[bool, str]:
 
             def _update():
                 supabase.table("otp_log").update({
-                    "reset_used": True,
-                    "reset_success": True
+                    "otp_used": True,
+                    "otp_success": True
                 }).eq("otp_id", record_id).execute()
 
             executor.submit(_update)

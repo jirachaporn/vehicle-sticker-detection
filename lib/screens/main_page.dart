@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:myproject/widgets/top_header.dart';
 import '../providers/app_state.dart';
-import '../widgets/sidebar.dart';
+import '../widgets/sidebar/sidebar.dart';
 import 'home_page.dart';
 import 'permission_page.dart';
 import 'overview_page.dart';

@@ -15,7 +15,7 @@ class ListResponse(BaseModel):
 def get_notifications(
     location_id: str = Query(...),
     status: Literal["new", "read", "dismissed", "all"] = Query("new"),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(100, ge=1, le=100),
     offset: int = Query(0, ge=0),
     severity: Optional[Literal["info","warning","critical"]] = None):
     return list_notifications(location_id, status, limit, offset, severity)

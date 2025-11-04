@@ -28,7 +28,7 @@ def create_and_send_otp(email: str) -> tuple[bool, str]:
         supabase.table("otp_log").insert({
             "by_email": email,
             "otp_code": otp,
-            "reset_used": False,
+            "otp_used": False,            # ✅ เปลี่ยนชื่อให้ตรงกับ DB
             "otp_type": "reset_password",
             "expires_at": expires_at
         }).execute()
@@ -52,7 +52,7 @@ def verify_otp(email: str, otp: str) -> tuple[bool, str]:
             .select("otp_id") \
             .eq("by_email", email) \
             .eq("otp_code", otp) \
-            .eq("reset_used", False) \
+            .eq("otp_used", False) \
             .eq("otp_type", "reset_password") \
             .gt("expires_at", datetime.utcnow().isoformat()) \
             .order("created_at", desc=True) \
@@ -65,8 +65,8 @@ def verify_otp(email: str, otp: str) -> tuple[bool, str]:
             # mark OTP as used (non-blocking)
             def _update():
                 supabase.table("otp_log").update({
-                    "reset_used": True,
-                    "reset_success": True
+                    "otp_used": True,  
+                    "otp_success": True
                 }).eq("otp_id", record_id).execute()
 
             executor.submit(_update)

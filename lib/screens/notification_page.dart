@@ -45,7 +45,7 @@ class _NotificationPageState extends State<NotificationPage> {
 
   Future<void> markAllRead() async {
     try {
-      await api.markAllRead(widget.locationId, selectedSeverity.toLowerCase());
+      await api.markAllRead(widget.locationId);
       setState(() {
         notifications = notifications.map((n) {
           if (selectedSeverity == 'All' || n.severity == selectedSeverity) {
