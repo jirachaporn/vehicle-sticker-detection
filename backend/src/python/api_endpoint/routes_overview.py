@@ -1,4 +1,4 @@
-# api_endpoint/routes_overview.py - API endpoint for overview statistics (refactor)
+# api_endpoint/routes_overview.py - API endpoint for overview statistics
 from fastapi import APIRouter
 from ..db.supabase_client import get_supabase_client
 from datetime import datetime, timedelta
@@ -9,7 +9,8 @@ router = APIRouter()
 TZ = ZoneInfo("Asia/Bangkok")
 HOURS_BUCKETS = [0, 3, 6, 9, 12, 15, 18, 21]
 
-def _parse_ts_to_local(ts: str) -> datetime | None:
+# แปลงเวลาเป็นไทย
+def parse_ts_to_local(ts: str) -> datetime | None:
     if not ts:
         return None
     try:
@@ -24,6 +25,7 @@ def _parse_ts_to_local(ts: str) -> datetime | None:
 @router.get("/overview/{location_id}")
 def get_overview(location_id: str):
     try:
+        # ดึงข้อมูล detections ของ location
         sb = get_supabase_client()
         res = sb.table("detections") \
             .select("detected_at,is_sticker,direction") \
@@ -36,6 +38,7 @@ def get_overview(location_id: str):
         seven_days_ago = today - timedelta(days=6)
         twenty_four_hours_ago = now - timedelta(hours=24)
 
+        # นับ alerts จากตาราง notifications
         alerts_q = (
             sb.table("notifications")
             .select("notifications_id", count="exact")   
@@ -73,7 +76,7 @@ def get_overview(location_id: str):
         out_count = 0
 
         for r in rows:
-            dt_local = _parse_ts_to_local(r.get("detected_at"))
+            dt_local = parse_ts_to_local(r.get("detected_at"))
             if dt_local is None:
                 continue
 
@@ -128,8 +131,7 @@ def get_overview(location_id: str):
             "weeklyData": weeklyData,
             "monthlyData": monthlyData,
             "recentActivity": recentActivity,
-            "detectionAccuracy": accuracy 
-        }
+            "detectionAccuracy": accuracy }
 
     except Exception as e:
         return {"error": str(e)}

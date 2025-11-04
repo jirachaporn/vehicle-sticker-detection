@@ -1,4 +1,5 @@
-# utils/notify_rules.py
+# # src/python/utils/notify_rules.py
+# สร้าง payload การแจ้งเตือนจาก detection title/message/severity/meta เพื่อ INSERT ตาราง notifications
 from typing import Dict, Optional
 
 SEVERITY_INFO = "info"
@@ -7,33 +8,31 @@ SEVERITY_CRITICAL = "critical"
 
 STATUS_NEW = "new"
 STATUS_READ = "read"
-STATUS_DISMISSED = "dismissed"
 
-def _lower(s, default=""):
+def lower_str(s, default=""):
     return (s or default).lower()
 
 def classify_notification(
     detection_row: Dict,*,
     is_registered: Optional[bool] = None,
     location_license: Optional[str] = None,
-    registration: Optional[Dict] = None
-) -> Optional[Dict]:
+    registration: Optional[Dict] = None) -> Optional[Dict]:
     """
-    รับแถว detections + ผลตรวจสติกเกอร์ แล้วคืนพารามิเตอร์เพื่อ insert ลง ตาราง notifications
-    ### 4 Scenario:
+    เอาแถว detections + ผลตรวจสติกเกอร์ ส่งคืนพารามิเตอร์เพื่อ insert ลง ตาราง notifications
+    #4 Scenario:
     1) Vehicle YES + Sticker YES + Registered(TRUE)   -> Authorized (info)
     2) Vehicle YES + Sticker YES + Registered(FALSE)  -> Unauthorized (warning)
     3) Vehicle NO/unknown + Sticker YES               -> Suspicious (warning)
     4) Vehicle NO/unknown + Sticker NO                -> Abnormal/Critical (critical)
-    หมายเหตุ: หาก Vehicle YES + Sticker NO จะถือเป็น Unauthorized (warning)
+    แต่ถ้าหาก Vehicle YES + Sticker NO จะถือเป็น Unauthorized (warning)
     """
     dp = detection_row.get("detected_plate") or {}
     is_sticker = bool(detection_row.get("is_sticker"))
-    is_vehicle = _lower(dp.get("is_vehicle"), "unknown")
+    is_vehicle = lower_str(dp.get("is_vehicle"), "unknown")
     ocr_status = dp.get("status")
     lp = dp.get("lp_number")
     province = dp.get("province")
-    direction = _lower(detection_row.get("direction"), "in")
+    direction = lower_str(detection_row.get("direction"), "in")
     image_paths = detection_row.get("image_path") or []
     first_image = image_paths[0] if image_paths else None
 
@@ -49,7 +48,7 @@ def classify_notification(
         "registration": registration or {"is_registered": is_registered}
     }
 
-    # === Scenario 1: Registered + Sticker + Vehicle YES ===
+    # Scenario 1: Registered + Sticker + Vehicle YES 
     if is_vehicle == "yes" and is_sticker and is_registered is True:
         return {
             "title": "Authorized Vehicle",
@@ -61,7 +60,7 @@ def classify_notification(
             "meta": {**base_meta, "reason_codes": ["REGISTERED_WITH_STICKER"]}
         }
 
-    # === Scenario 2: NOT Registered + Sticker + Vehicle YES ===
+    # Scenario 2: NOT Registered + Sticker + Vehicle YES 
     if is_vehicle == "yes" and is_sticker and (is_registered is False):
         return {
             "title": "Sticker Shown but Plate Not Registered",
@@ -73,7 +72,7 @@ def classify_notification(
             "meta": {**base_meta, "reason_codes": ["STICKER_WITH_UNREGISTERED_PLATE"]}
         }
 
-    # === Scenario 3: Vehicle NO/unknown + Sticker YES ===
+    # Scenario 3: Vehicle NO/unknown + Sticker YES
     if is_vehicle != "yes" and is_sticker:
         return {
             "title": "Suspicious: Sticker Only",
@@ -97,7 +96,7 @@ def classify_notification(
             "meta": {**base_meta, "reason_codes": ["VEHICLE_WITHOUT_STICKER"]}
         }
 
-    # === Scenario 4: Vehicle NO/unknown + Sticker NO ===
+    # Scenario 4: Vehicle NO/unknown + Sticker NO
     return {
         "title": "Critical: No Vehicle, No Sticker",
         "message": "Abnormal trigger (no vehicle and no sticker detected).",

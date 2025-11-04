@@ -2,36 +2,38 @@
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from typing import Optional, Literal
-from ..api_service.notifications_service import (list_notifications, summary, mark_read, dismiss, mark_all_read)
+from ..api_service.notifications_service import (
+    list_notifications, 
+    summary, 
+    mark_read,
+    mark_all_read)
 
 router = APIRouter(prefix="/notifications")
 
 class ListResponse(BaseModel):
-    items: list
-    total: int
-    unread_count: int
+    items: list # รายการแจ้งเตือน
+    total: int # จำนวนแจ้งเตือนทั้งหมด
+    unread_count: int # จำนวนแจ้งเตือนที่ยังไม่อ่าน
 
-@router.get("", response_model=ListResponse)
+# list notification of location
+@router.get("", response_model=ListResponse) 
 def get_notifications(
     location_id: str = Query(...),
-    status: Literal["new", "read", "dismissed", "all"] = Query("new"),
-    limit: int = Query(100, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    status: Literal["new", "read", "all"] = Query("new"),
     severity: Optional[Literal["info","warning","critical"]] = None):
-    return list_notifications(location_id, status, limit, offset, severity)
+    return list_notifications(location_id, status, severity)
 
+# unread count ตาม severity
 @router.get("/summary")
 def get_summary(location_id: str = Query(...)):
     return summary(location_id)
 
+# mark a notification as read
 @router.patch("/{notification_id}/read")
 def api_mark_read(notification_id: str):
     return mark_read(notification_id)
 
-@router.patch("/{notification_id}/dismiss")
-def api_dismiss(notification_id: str):
-    return dismiss(notification_id)
-
+# mark all notifications as read
 class MarkAllBody(BaseModel):
     location_id: str
     type: Optional[str] = "ALL"
