@@ -1,6 +1,6 @@
-// lib/widgets/notification_dialogs/delete_dialog.dart
 import 'package:flutter/material.dart';
 import '../../models/notification_item.dart';
+import '../../providers/api_service.dart';
 
 class DeleteConfirmationDialog extends StatelessWidget {
   final NotificationItem item;
@@ -11,6 +11,37 @@ class DeleteConfirmationDialog extends StatelessWidget {
     required this.item,
     required this.onDelete,
   });
+
+  Future<void> deleteNotification(BuildContext context, String notificationId) async {
+    final api = ApiService();
+    try {
+      final response = await api.deleteNotification(notificationId);
+
+      if (response) {
+        onDelete();  // ลบ item จาก UI
+      } else {
+        throw Exception('Failed to delete notification');
+      }
+    } catch (e) {
+      debugPrint("Error: $e");
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context); // ปิด Dialog ถ้าคำสั่งล้มเหลว
+      }
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Error'),
+          content: const Text('Failed to delete notification. Please try again.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +60,7 @@ class DeleteConfirmationDialog extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha:  0.15),
+              color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -51,8 +82,6 @@ class DeleteConfirmationDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-
-            // Title
             const Text(
               'Confirm Delete',
               textAlign: TextAlign.center,
@@ -63,16 +92,12 @@ class DeleteConfirmationDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-
-            // Message
             const Text(
               'Are you sure you want to delete this notification?',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 15, color: Colors.black54, height: 1.5),
             ),
             const SizedBox(height: 24),
-
-            // Buttons
             Row(
               children: [
                 Expanded(
@@ -93,7 +118,7 @@ class DeleteConfirmationDialog extends StatelessWidget {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
-                      onDelete();
+                      deleteNotification(context, item.id);  // ลบ notification
                       Navigator.pop(context);
                     },
                     style: ElevatedButton.styleFrom(

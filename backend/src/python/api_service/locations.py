@@ -164,13 +164,17 @@ def update_location(location_id: str, data: dict):
 # ---------- DELETE LOCATION ----------
 def delete_location(location_id: str):
     try:
+        supabase.table("permission_log").delete().eq("location_id", location_id).execute()
+
         try:
             supabase.table("location_members").delete().eq("location_id", location_id).execute()
             supabase.table("model").delete().eq("location_id", location_id).execute()
             supabase.table("detections").delete().eq("location_id", location_id).execute()
-        except Exception:
+        except Exception as e:
+            print(f"⚠️ Error while deleting related data: {e}")
             pass
 
+        # ลบข้อมูลจากตาราง locations
         res = supabase.table("locations").delete().eq("location_id", location_id).execute()
         if res.data:
             return True, "Location deleted"
@@ -178,3 +182,4 @@ def delete_location(location_id: str):
     except Exception as e:
         print(f"🔥 ERROR during delete_location: {e}")
         return False, str(e)
+

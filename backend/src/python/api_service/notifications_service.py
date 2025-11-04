@@ -194,3 +194,13 @@ def mark_all_read(location_id: str, type_filter: Optional[str] = None) -> int:
         q = q.eq("title", type_filter)
     res = q.execute()
     return len(res.data or [])
+
+
+def mark_delete_notification(notification_id: str):
+    sb = get_supabase_client()
+    # ลบ notification ตาม notification_id
+    res = sb.table("notifications").delete().eq("notifications_id", notification_id).execute()
+    if res.data:
+        return {"message": "Notification deleted successfully"}
+    else:
+        return {"message": "Notification not found"}

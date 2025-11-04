@@ -72,21 +72,14 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
     final locationData = {
       'location_name': _nameController.text.trim(),
       'location_address': _addressController.text.trim(),
-      'location_color': toWebHex(_selectedColor!), // ใช้ฟังก์ชันที่ให้ไว้
+      'location_color': toWebHex(_selectedColor!),
       'location_description': _descriptionController.text.trim().isEmpty
           ? null
           : _descriptionController.text.trim(),
     };
-
-    // ❌ ไม่ต้อง gen location_id ที่นี่ ปล่อยให้ AddLicenseDialog จัดการตอน insert
-    // ถ้าจำเป็นต้อง gen ที่นี่จริงๆ ต้องลบการ gen ใน AddLicenseDialog ออก
-
     if (!mounted) return;
 
-    // ปิด dialog นี้ก่อน
     Navigator.of(context).pop();
-
-    // เปิด AddLicenseDialog
     await showDialog(
       context: context,
       barrierDismissible: false,

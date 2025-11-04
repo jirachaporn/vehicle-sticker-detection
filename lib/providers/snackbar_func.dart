@@ -1,8 +1,9 @@
-// lib/helpers/snackbar_helper.dart
+// lib/helpers/snackbar_func.dart
 
 import 'package:flutter/material.dart';
 import '../widgets/snackbar/fail_snackbar.dart';
 import '../widgets/snackbar/success_snackbar.dart';
+
 
 void showFailMessage(BuildContext context, String errorMessage, dynamic error) {
   final nav = Navigator.of(context, rootNavigator: true);

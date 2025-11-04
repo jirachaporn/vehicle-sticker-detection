@@ -3,10 +3,12 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from typing import Optional, Literal
 from ..api_service.notifications_service import (
-    list_notifications, 
-    summary, 
-    mark_read,
-    mark_all_read)
+        list_notifications, 
+        summary, 
+        mark_read,
+        mark_all_read,
+        mark_delete_notification,
+    )
 
 router = APIRouter(prefix="/notifications")
 
@@ -42,3 +44,8 @@ class MarkAllBody(BaseModel):
 def api_mark_all_read(body: MarkAllBody):
     updated = mark_all_read(body.location_id, body.type)
     return {"updated": updated}
+
+@router.delete("/delete_location/{notification_id}")
+def delete_notification(notification_id: str):
+    return mark_delete_notification(notification_id)
+

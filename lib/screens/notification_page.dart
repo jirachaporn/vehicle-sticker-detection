@@ -4,6 +4,7 @@ import '../providers/api_service.dart';
 import '../widgets/notification_dialogs/delete_dialog.dart';
 import '../widgets/notification_dialogs/details_dialog.dart';
 import '../widgets/notification_dialogs/notification_card.dart';
+import '../providers/snackbar_func.dart';
 
 class NotificationPage extends StatefulWidget {
   final String locationId;
@@ -64,10 +65,18 @@ class _NotificationPageState extends State<NotificationPage> {
       context: context,
       builder: (_) => DeleteConfirmationDialog(
         item: item,
-        onDelete: () {
-          setState(() {
-            notifications.remove(item);
-          });
+        onDelete: () async {
+          try {
+            await api.deleteNotification(item.id);
+            showSuccessMessage(context, 'Delete Successfully!');
+            if (mounted) {
+              setState(() {
+                notifications.remove(item);
+              });
+            }
+          } catch (e) {
+            debugPrint("Error deleting notification: $e");
+          }
         },
       ),
     );
@@ -202,7 +211,6 @@ class _NotificationPageState extends State<NotificationPage> {
               style: TextStyle(color: Colors.grey.shade600),
             ),
             const SizedBox(height: 20),
-
             Row(
               children: [
                 Expanded(
@@ -254,9 +262,7 @@ class _NotificationPageState extends State<NotificationPage> {
                   onPressed: markAllRead,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
-                    foregroundColor: const Color(
-                      0xFF2563EB,
-                    ), // สีตัวอักษรน้ำเงิน
+                    foregroundColor: const Color(0xFF2563EB),
                     side: const BorderSide(
                       color: Color(0xFF2563EB),
                       width: 1.5,
@@ -280,9 +286,7 @@ class _NotificationPageState extends State<NotificationPage> {
                 ),
               ],
             ),
-
             const SizedBox(height: 20),
-
             if (unreadList.isNotEmpty) ...[
               const Text(
                 'New',
@@ -291,7 +295,6 @@ class _NotificationPageState extends State<NotificationPage> {
               const SizedBox(height: 8),
               for (var item in unreadList) buildNotificationCard(item),
             ],
-
             if (readList.isNotEmpty) ...[
               const SizedBox(height: 24),
               const Text(

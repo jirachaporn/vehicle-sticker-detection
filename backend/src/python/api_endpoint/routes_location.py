@@ -65,7 +65,7 @@ def update_location_endpoint(location_id: str, req: LocationUpdateRequest):
 
 
 # ---------- DELETE ----------
-@router.delete("/locations/{location_id}")
+@router.delete("/delete_location/{location_id}")
 def delete_location_endpoint(location_id: str):
     success, message = delete_location(location_id)
     if not success:
