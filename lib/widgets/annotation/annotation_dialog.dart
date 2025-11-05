@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../providers/api_service.dart';
 import '../../providers/snackbar_func.dart';
 import '../../providers/file_manager.dart';
 
@@ -79,7 +80,7 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
     }
   }
 
-  Widget _buildStatusDropdown() {
+  Widget buildStatusDropdown() {
     final (bg, fg, border) = _statusColors(status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -179,7 +180,7 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
     }
   }
 
-  Future<void> _downloadImages() async {
+  Future<void> downloadImages() async {
     if (downloading) return;
 
     setState(() => downloading = true);
@@ -205,7 +206,7 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
     }
   }
 
-  Future<void> _save() async {
+  Future<void> save_data() async {
     setState(() => saving = true);
     try {
       final updateData = <String, dynamic>{'sticker_status': status};
@@ -220,6 +221,24 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
           .from('model')
           .update(updateData)
           .eq('model_id', widget.modelId);
+
+      debugPrint('status: $status');
+      debugPrint('modelId: ${widget.modelId}');
+      
+
+      // if (status == 'ready') {
+      //   await ApiService.sendNotificationStatus(widget.modelId, 'save');
+      // } else if (status == 'failed') {
+      //   await ApiService.sendNotificationStatus(widget.modelId, 'fail');
+      
+      // } // processing ไม่ต้องส่งการแจ้งเตือน
+      if (status == 'ready') {
+        // ส่ง 'save' เมื่อ status เป็น 'ready'
+        await ApiService.sendNotificationStatus(widget.modelId, 'save');
+      } else if (status == 'failed') {
+        // ส่ง 'fail' เมื่อ status เป็น 'failed'
+        await ApiService.sendNotificationStatus(widget.modelId, 'fail');
+      } // processing ไม่ต้องส่งการแจ้งเตือน
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -281,7 +300,7 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  _buildStatusDropdown(),
+                  buildStatusDropdown(),
                 ],
               ),
 
@@ -430,7 +449,7 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
                   ),
                   const Spacer(),
                   OutlinedButton(
-                    onPressed: saving || uploading ? null : _save,
+                    onPressed: saving || uploading ? null : save_data,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF1E63F1),
                       side: const BorderSide(color: Color(0xFF1E63F1)),
@@ -457,7 +476,7 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
                   ElevatedButton(
                     onPressed: (saving || uploading || downloading)
                         ? null
-                        : _downloadImages,
+                        : downloadImages,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1E63F1),
                       foregroundColor: Colors.white,

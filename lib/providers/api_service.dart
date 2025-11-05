@@ -188,6 +188,27 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>?> sendNotificationStatus(
+    String modelId,
+    String status,
+  ) async {
+    final url = Uri.parse('$baseUrl/model/$modelId/noti?status=$status');
+
+    try {
+      final response = await client.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      return response.statusCode == 200
+          ? {'success': true, 'message': 'Notification sent successfully'}
+          : {'success': false, 'message': 'Failed to send notification'};
+    } catch (e) {
+      debugPrint('❌ send-notification-status error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
   Future<Map<String, dynamic>?> fetchOverviewData(String locationId) async {
     final url = Uri.parse('$baseUrl/overview/$locationId');
 
@@ -232,7 +253,6 @@ class ApiService {
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('http://127.0.0.1:5000/camera/car-detect'),
-        // Uri.parse('$baseUrl/camera/car-detect'),
       );
       request.fields['location_id'] = locationId;
       request.fields['model_id'] = modelId;

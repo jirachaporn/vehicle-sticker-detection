@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:myproject/widgets/top_header.dart';
 import '../providers/app_state.dart';
+// import '../providers/snackbar_func.dart';
 import '../widgets/sidebar/sidebar.dart';
 import 'home_page.dart';
 import 'permission_page.dart';
@@ -62,6 +63,11 @@ class MainPageState extends State<MainPage> {
 
           if (selected != null) {
             final modelId = appState.getActiveModelFor(selected.id);
+
+            // if (modelId == null) {
+            //   showFailMessage(context,'Detection will not work','No active model found',);
+            // }
+
             try {
               final cameras = await availableCameras();
               cameraManager.stopDetection();

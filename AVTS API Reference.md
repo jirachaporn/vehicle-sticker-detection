@@ -107,33 +107,13 @@ Query Parameters
 #### `GET http://localhost:8000/table/44950349-bd33-49a6-a90a-3159537d2361/records?search=2ฒช6726&direction=in&sticker=true&sort=detected_at&page=1&page_size=20`
 
 ## 8) Save Trained Model & Create Notification
-Path Parameters
-| Field      | Type   | Required | Example                                  | Description                                  |
-| ---------- | ------ | -------- | ---------------------------------------- | -------------------------------------------- |
-| `model_id` | string | ✅        | `"78e55fae-dbde-4980-802a-483ed06c3c19"` | Model UUID ที่ต้องการบันทึกสถานะเป็น `ready` |
+| Field      | Type   | Required | Example                                | Description                   |
+| ---------- | ------ | -------- | -------------------------------------- | ----------------------------- |
+| `model_id` | string | ✅        | `78e55fae-dbde-4980-802a-483ed06c3c19` | UUID ของโมเดลที่จะอัปเดตสถานะ |
+| `status` | string | ✅        | `"save หรือ fail"` |             |
 
-
-### 📤 Request Body raw (JSON) - Ready
-```json
-{
-  "location_id": "44950349-bd33-49a6-a90a-3159537d2361",
-  "reason": "Model training completed :)"
-}
-```
-- ### How to call `POST /models/{model_id}/save` กรณีแจ้ง Ready
-#### `POST http://localhost:8000/models/78e55fae-dbde-4980-802a-483ed06c3c19/save`
-### 📤 Request Body raw (JSON) - Failed
-```json
-{
-  "location_id": "44950349-bd33-49a6-a90a-3159537d2361",
-  "reason": "There are not enough sticker images for training the model"
-}
-```
-- ### How to call `POST /models/{model_id}/fail` กรณีแจ้ง Failed
-#### `POST http://localhost:8000/models/5058d77f-7e0a-4454-a5b6-fe7d116811ab/fail`
-### Notes
-- จะอัปเดตในตาราง `model` เป็น `sticker_status = "ready"` และ `is_active = false` จากนั้นจะสร้างแถวในตาราง `notifications` ให้ทันที
-- `"reason"` เป็นออปชัน ใช้ควบคุมข้อความใน meta.reason ของ Notification
+- ### How to call `POST /model/{model_id}/noti?status=save` — เซ็ตสถานะ ready (เทรนสำเร็จ)
+- ### How to call `POST /model/{model_id}/noti?status=fail)` — เซ็ตสถานะ failed (เทรนล้มเหลว)
 
 ## 9) Create Permission Notification (from `permission_log`)
 Path Parameters

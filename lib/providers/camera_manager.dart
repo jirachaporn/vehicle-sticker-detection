@@ -40,9 +40,7 @@ class CameraManager extends ChangeNotifier {
       final dir = i == 0 ? 'in' : 'out';
       directions[i] = dir;
 
-      debugPrint(
-        'Initialized camera $i ($dir): ${camera.name}',
-      );
+      debugPrint('Initialized camera $i ($dir): ${camera.name}');
     }
 
     isInitialized = true;
@@ -85,6 +83,7 @@ class CameraManager extends ChangeNotifier {
   }
 
   Future<void> detectLoop() async {
+    debugPrint('\n=== detectLoop STARTED ===');
     while (detecting && !disposing && locationId != null && modelId != null) {
       for (var entry in controllers.entries) {
         if (!detecting || disposing) break;
@@ -92,7 +91,6 @@ class CameraManager extends ChangeNotifier {
         final index = entry.key;
         final controller = entry.value;
         final direction = directions[index];
-
         try {
           if (controller.value.isInitialized && !disposing) {
             final image = await controller.takePicture();
@@ -107,7 +105,7 @@ class CameraManager extends ChangeNotifier {
           }
         } catch (e) {
           if (e.toString().contains('Disposed CameraController')) {
-            debugPrint('Camera $index ($direction) was disposed mid-detection',);
+            debugPrint('Camera $index ($direction) was disposed mid-detection');
             detecting = false;
             break;
           } else {
