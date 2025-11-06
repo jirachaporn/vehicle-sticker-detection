@@ -217,6 +217,8 @@ class _MembersTabState extends State<MembersTab> {
                                     ),
                                   ),
                                   items: PermissionType.values
+                                      .where(
+                                        (t) => t != PermissionType.owner,)
                                       .map(
                                         (t) => DropdownMenuItem(
                                           value: t,
@@ -260,9 +262,9 @@ class _MembersTabState extends State<MembersTab> {
                                   await provider.disableMember(
                                     locationId: widget.locationId,
                                     email: m.email,
-                                    name: m.name ??'Unknown',
+                                    name: m.name ?? 'Unknown',
                                     permission: m.permission,
-                                    byEmail: provider.currentEmail, 
+                                    byEmail: provider.currentEmail,
                                   );
 
                                   if (!mounted) return;

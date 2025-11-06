@@ -96,6 +96,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
     final appState = Provider.of<AppState>(context, listen: false);
 
     try {
+      // ======= CASE 1: EDIT MODE =======
       if (widget.isEdit &&
           widget.locationLicense != null &&
           widget.initialLocation != null) {
@@ -103,7 +104,8 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
         final currentLocationLicense = widget.locationLicense!;
 
         // UPDATE แถวเก่า
-        for (final r in _rows.where((e) => e.licenseId != null)) {
+        final updateRows = _rows.where((e) => e.licenseId != null);
+        for (final r in updateRows) {
           await supa
               .from('license_plate')
               .update({
@@ -119,22 +121,20 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
         }
 
         // INSERT แถวใหม่
-        final newcomersRows = _rows.where((e) => e.licenseId == null).toList();
-        if (newcomersRows.isNotEmpty) {
-          final newcomers = newcomersRows
-              .map(
-                (r) => {
-                  'location_license': currentLocationLicense,
-                  'license_text': r.licenseText.text.trim(),
-                  'license_local': r.licenseLocal.text.trim(),
-                  'car_owner': r.carOwner.text.trim(),
-                  'note': r.note.text.trim().isEmpty
-                      ? null
-                      : r.note.text.trim(),
-                  'on_license': r.onLicense,
-                },
-              )
-              .toList();
+        final newcomers = _rows
+            .where((e) => e.licenseId == null)
+            .map(
+              (r) => {
+                'location_license': currentLocationLicense,
+                'license_text': r.licenseText.text.trim(),
+                'license_local': r.licenseLocal.text.trim(),
+                'car_owner': r.carOwner.text.trim(),
+                'note': r.note.text.trim().isEmpty ? null : r.note.text.trim(),
+                'on_license': r.onLicense,
+              },
+            )
+            .toList();
+        if (newcomers.isNotEmpty) {
           await supa
               .from('license_plate')
               .insert(newcomers)
@@ -149,7 +149,7 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
               .inFilter('license_id', _deletedIds);
         }
 
-        // UPDATE location ถ้ามี
+        // UPDATE location ถ้ามีข้อมูลอัพเดท
         if (widget.locationData != null) {
           await supa
               .from('locations')
@@ -158,21 +158,21 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
               .select('location_id');
         }
       }
-      // สร้าง location ใหม่
+      // ======= CASE 2: CREATE NEW LOCATION =======
       else if (widget.locationData != null) {
         final newLocationId = uuid.v4();
+
         final locRow = {...widget.locationData!, 'location_id': newLocationId}
-          ..remove('location_license');
-        await supa.from('locations').insert(locRow);
+          ..remove('location_license'); // ให้ DB เติมเอง
 
-        final licRes = await supa
+        // Insert แล้วดึง location_license กลับทันที
+        final insertRes = await supa
             .from('locations')
-            .select('location_license')
-            .eq('location_id', newLocationId)
-            .maybeSingle();
+            .insert(locRow)
+            .select('location_id, location_license')
+            .single();
 
-        final locationLicense = licRes?['location_license'] as String?;
-        if (locationLicense == null) throw Exception('ไม่พบ location_license');
+        final locationLicense = insertRes['location_license'] as String;
 
         final plateRows = _rows.map((r) {
           return {
@@ -189,25 +189,28 @@ class _AddLicenseDialogState extends State<AddLicenseDialog> {
           await supa.from('license_plate').insert(plateRows);
         }
       }
-      // เพิ่มป้ายใน location ที่มีอยู่
+      // ======= CASE 3: ADD PLATES INTO EXISTING LOCATION =======
       else if (!widget.isEdit && widget.locationLicense != null) {
         final currentLocationLicense = widget.locationLicense!;
-        final plateRows = _rows.map((r) {
-          return {
-            'location_license': currentLocationLicense,
-            'license_text': r.licenseText.text.trim(),
-            'license_local': r.licenseLocal.text.trim(),
-            'car_owner': r.carOwner.text.trim(),
-            'note': r.note.text.trim().isEmpty ? null : r.note.text.trim(),
-            'on_license': r.onLicense,
-          };
-        }).toList();
+        final plateRows = _rows
+            .map(
+              (r) => {
+                'location_license': currentLocationLicense,
+                'license_text': r.licenseText.text.trim(),
+                'license_local': r.licenseLocal.text.trim(),
+                'car_owner': r.carOwner.text.trim(),
+                'note': r.note.text.trim().isEmpty ? null : r.note.text.trim(),
+                'on_license': r.onLicense,
+              },
+            )
+            .toList();
 
         if (plateRows.isNotEmpty) {
           await supa.from('license_plate').insert(plateRows);
         }
       }
 
+      // REFRESH DATA
       await appState.loadLocations(appState.loggedInEmail);
 
       if (!mounted) return;

@@ -244,6 +244,46 @@ class ApiService {
 
   // ตรวจจับรถ
   static Future<Map<String, dynamic>?> detectVehicleFrom(
+    Uint8List jpegBytes,
+  ) async {
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://127.0.0.1:5000/camera/car-detect'),
+      );
+      request.files.add(
+        http.MultipartFile.fromBytes('file', jpegBytes, filename: 'frame.jpg'),
+      );
+
+      var response = await request.send();
+      debugPrint('🔍 car-detect status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        var body = await response.stream.bytesToString();
+        debugPrint('📦 car-detect body: $body'); // ⭐ เพิ่มนี้
+
+        if (body.isEmpty) {
+          debugPrint('⚠️ body ว่างเปล่า');
+          return null;
+        }
+
+        try {
+          return jsonDecode(body);
+        } catch (e) {
+          debugPrint('❌ JSON decode error: $e');
+          return null;
+        }
+      } else {
+        debugPrint('❌ car-detect failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error calling detectVehicle API: $e');
+      return null;
+    }
+    return null;
+  }
+
+  static Future<Map<String, dynamic>?> detect_OCR(
     Uint8List jpegBytes, {
     required String locationId,
     required String modelId,
@@ -252,7 +292,7 @@ class ApiService {
     try {
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://127.0.0.1:5000/camera/car-detect'),
+        Uri.parse('http://127.0.0.1:5000/detect'),
       );
       request.fields['location_id'] = locationId;
       request.fields['model_id'] = modelId;
@@ -263,15 +303,14 @@ class ApiService {
 
       var response = await request.send();
       if (response.statusCode == 200) {
+        debugPrint('detect');
         var body = await response.stream.bytesToString();
         return jsonDecode(body);
-      } else {
-        debugPrint('API error: ${response.statusCode}');
-        return null;
       }
     } catch (e) {
       debugPrint('Error calling detectVehicle API: $e');
       return null;
     }
+    return null;
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'api_service.dart';
@@ -10,6 +12,7 @@ class CameraManager extends ChangeNotifier {
   String? modelId;
   bool detecting = false;
   bool disposing = false;
+  Map<int, bool> ocrBusy = {};
 
   Future<void> init(List<CameraDescription> cameras) async {
     if (cameras.isEmpty) return;
@@ -84,6 +87,7 @@ class CameraManager extends ChangeNotifier {
 
   Future<void> detectLoop() async {
     debugPrint('\n=== detectLoop STARTED ===');
+
     while (detecting && !disposing && locationId != null && modelId != null) {
       for (var entry in controllers.entries) {
         if (!detecting || disposing) break;
@@ -91,28 +95,78 @@ class CameraManager extends ChangeNotifier {
         final index = entry.key;
         final controller = entry.value;
         final direction = directions[index];
-        try {
-          if (controller.value.isInitialized && !disposing) {
-            final image = await controller.takePicture();
-            final bytes = await image.readAsBytes();
 
-            await ApiService.detectVehicleFrom(
-              bytes,
+        try {
+          if (!controller.value.isInitialized || disposing) continue;
+
+          // ถ่ายรูปตรวจรถ
+          final image = await controller.takePicture();
+          final bytes = await image.readAsBytes();
+
+          debugPrint('📸 ตรวจจับรถ กล้อง $index ($direction)');
+          final result = await ApiService.detectVehicleFrom(bytes);
+
+          if (result == null || result['status'] != 'car_detected') {
+            debugPrint('❌ ไม่พบรถ (กล้อง $index)');
+            continue;
+          }
+          await Future.delayed(const Duration(milliseconds: 200));
+
+          // ✅ กัน OCR ซ้อน (สำคัญที่สุด)
+          if (ocrBusy[index] == true) {
+            debugPrint('⏳ OCR ของกล้อง $index กำลังทำงาน → ข้าม');
+            continue;
+          }
+
+          ocrBusy[index] = true; // ✅ ล็อกไว้ก่อนเริ่ม
+          debugPrint('🚗 พบรถที่กล้อง $index ($direction) → เริ่ม OCR');
+
+          unawaited(
+            runOCR(
+              controller: controller,
+              direction: direction!,
               locationId: locationId!,
               modelId: modelId!,
-              direction: direction!,
-            );
-          }
+              index: index,
+            ),
+          );
+
         } catch (e) {
           if (e.toString().contains('Disposed CameraController')) {
-            debugPrint('Camera $index ($direction) was disposed mid-detection');
-            detecting = false;
-            break;
-          } else {
-            debugPrint('Camera detection error ($direction): $e');
+            debugPrint('⚠ กล้อง $index ถูก dispose → ข้าม');
+            continue;
           }
+          debugPrint('❌ DetectLoop Error ($direction): $e');
         }
       }
+    }
+  }
+
+  Future<void> runOCR({
+    required CameraController controller,
+    required String direction,
+    required String locationId,
+    required String modelId,
+    required int index,
+  }) async {
+    try {
+      await Future.delayed(const Duration(milliseconds: 800));
+
+      final ocrImage = await controller.takePicture();
+      final ocrBytes = await ocrImage.readAsBytes();
+
+      debugPrint("🔍 ส่ง OCR ($direction)");
+      await ApiService.detect_OCR(
+        ocrBytes,
+        locationId: locationId,
+        modelId: modelId,
+        direction: direction,
+      );
+      debugPrint("✅ OCR สำเร็จ ($direction)");
+    } catch (e) {
+      debugPrint("❌ OCR Error ($direction): $e");
+    } finally {
+      ocrBusy[index] = false; 
     }
   }
 
