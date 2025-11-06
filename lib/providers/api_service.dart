@@ -260,7 +260,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         var body = await response.stream.bytesToString();
-        debugPrint('📦 car-detect body: $body'); // ⭐ เพิ่มนี้
+        debugPrint('📦 car-detect body: $body'); 
 
         if (body.isEmpty) {
           debugPrint('⚠️ body ว่างเปล่า');

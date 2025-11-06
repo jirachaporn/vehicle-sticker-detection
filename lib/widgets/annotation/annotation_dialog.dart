@@ -225,12 +225,6 @@ class _AnnotationDialogState extends State<AnnotationDialog> {
       debugPrint('status: $status');
       debugPrint('modelId: ${widget.modelId}');
       
-
-      // if (status == 'ready') {
-      //   await ApiService.sendNotificationStatus(widget.modelId, 'save');
-      // } else if (status == 'failed') {
-      //   await ApiService.sendNotificationStatus(widget.modelId, 'fail');
-      
       // } // processing ไม่ต้องส่งการแจ้งเตือน
       if (status == 'ready') {
         // ส่ง 'save' เมื่อ status เป็น 'ready'

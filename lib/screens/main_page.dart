@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import 'package:myproject/widgets/top_header.dart';
 import '../providers/app_state.dart';
-// import '../providers/snackbar_func.dart';
 import '../widgets/sidebar/sidebar.dart';
 import 'home_page.dart';
 import 'permission_page.dart';
@@ -36,60 +35,75 @@ class MainPage extends StatefulWidget {
 
 class MainPageState extends State<MainPage> {
   String? _previousLocationId;
+  late VoidCallback _appStateListener;
+  AppState? _appState;
+  CameraManager? _cameraManager;
+  PermissionProvider? _permissionProvider;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _appState ??= context.read<AppState>();
+    _cameraManager ??= context.read<CameraManager>();
+    _permissionProvider ??= context.read<PermissionProvider>();
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final appState = context.read<AppState>();
-      final cameraManager = context.read<CameraManager>();
-
       try {
-        await appState.loadLocations(widget.email);
+        // โหลด locations
+        await _appState!.loadLocations(widget.email);
 
-        if (mounted && appState.locations.isNotEmpty) {
-          final permissionProvider = context.read<PermissionProvider>();
-          await permissionProvider.loadMembers(appState.locations.first.id);
+        if (mounted && _appState!.locations.isNotEmpty) {
+          // โหลดสมาชิก
+          await _permissionProvider!.loadMembers(_appState!.locations.first.id);
         }
 
-        appState.addListener(() async {
-          final selected = appState.selectedLocation;
-
-          if (selected?.id == _previousLocationId) {
-            return;
-          }
-
+        // สร้าง listener
+        _appStateListener = () async {
+          final selected = _appState!.selectedLocation;
+          if (selected?.id == _previousLocationId) return;
           _previousLocationId = selected?.id;
 
           if (selected != null) {
-            final modelId = appState.getActiveModelFor(selected.id);
-
-            // if (modelId == null) {
-            //   showFailMessage(context,'Detection will not work','No active model found',);
-            // }
+            final modelId = _appState!.getActiveModelFor(selected.id);
 
             try {
               final cameras = await availableCameras();
-              cameraManager.stopDetection();
-              await Future.delayed(const Duration(milliseconds: 100));
 
-              await cameraManager.init(cameras);
-              cameraManager.updateLocationAndModel(
+              await _cameraManager!.stopDetection();
+              await Future.delayed(const Duration(milliseconds: 150));
+
+              await _cameraManager!.init(cameras);
+
+              _cameraManager!.updateLocationAndModel(
                 location: selected.id,
                 model: modelId,
               );
-              cameraManager.startDetection();
+
+              _cameraManager!.startDetection();
             } catch (e) {
               debugPrint('Error initializing camera: $e');
             }
           } else {
-            cameraManager.stopDetection();
+            await _cameraManager!.stopDetection();
           }
-        });
+        };
+
+        // เพิ่ม listener
+        _appState!.addListener(_appStateListener);
       } catch (e) {
         debugPrint('Error initializing MainPage: $e');
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _appState?.removeListener(_appStateListener);
+    super.dispose();
   }
 
   Color parseHexColor(String hexColor) {

@@ -38,6 +38,7 @@ class _SignInPageState extends State<SignInPage> {
     final supabase = Supabase.instance.client;
     final email = _usernameOrEmailController.text.trim().toLowerCase();
     final password = _passwordController.text;
+    final appState = context.read<AppState>();
 
     if (email.isEmpty || password.isEmpty) {
       showFailMessage(context, 'Error', 'Please fill in all required fields.');
@@ -59,14 +60,14 @@ class _SignInPageState extends State<SignInPage> {
     setState(() => isLoading = true);
 
     try {
-      // ค้นหาผู้ใช้จาก email เท่านั้น
+      // ดึงผู้ใช้จาก auth_users
       final authUser = await supabase
           .from('auth_users')
           .select('*')
           .eq('auth_email', email)
           .maybeSingle();
 
-      debugPrint('authUser: ${authUser.toString()}');
+      debugPrint('authUser: $authUser');
 
       if (authUser == null) {
         showFailMessage(
@@ -77,6 +78,7 @@ class _SignInPageState extends State<SignInPage> {
         return;
       }
 
+      // ตรวจสอบรหัสผ่าน
       final passwordHash = sha256.convert(utf8.encode(password)).toString();
       if (passwordHash != (authUser['password_hash'] as String)) {
         showFailMessage(
@@ -87,7 +89,7 @@ class _SignInPageState extends State<SignInPage> {
         return;
       }
 
-      // อัพเดทเวลาล็อกอินล่าสุด
+      // อัพเดท last_sign_in
       await supabase
           .from('auth_users')
           .update({
@@ -98,14 +100,14 @@ class _SignInPageState extends State<SignInPage> {
           })
           .eq('auth_id', authUser['auth_id']);
 
-      // ดึงข้อมูลโปรไฟล์จากตาราง users โดยใช้ user_id (ซึ่งตรงกับ auth_id)
+      // ดึงข้อมูลโปรไฟล์จาก users
       final userProfile = await supabase
           .from('users')
           .select('user_name, user_email, color_profile, user_role')
           .eq('user_id', authUser['auth_id'])
           .maybeSingle();
 
-      // ใช้ข้อมูลจาก users ถ้ามี, ถ้าไม่มีใช้จาก auth_users
+      // ตั้งค่า fallback ถ้า users ไม่มีข้อมูล
       final userName =
           (userProfile?['user_name'] as String?)?.trim() ??
           (authUser['auth_username'] as String?)?.trim() ??
@@ -116,11 +118,15 @@ class _SignInPageState extends State<SignInPage> {
           '';
       final colorHex =
           (userProfile?['color_profile'] as String?)?.trim() ?? '#3254D0';
-      // final userRole = (userProfile?['user_role'] as String?)?.trim() ?? 'user';
+      final userRole = (userProfile?['user_role'] as String?)?.trim() ?? 'user';
 
-      // final bool isAdmin = userRole == 'admin';
-      // context.read<AppState>().setAdminStatus(isAdmin);
+      // ตั้งค่า admin status
+      final isAdmin = userRole == 'admin';
+      // final isAdmin = userRole == 'admin' || email == 'vdowduang@gmail.com';
+      appState.isAdmin = isAdmin;
+
       context.read<AppState>().setLoggedInEmail(userEmail);
+      debugPrint(userProfile.toString());
       showSuccessMessage(context, 'Welcome $userName!');
 
       if (!mounted) return;

@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'api_service.dart';
@@ -7,47 +6,70 @@ import 'api_service.dart';
 class CameraManager extends ChangeNotifier {
   Map<int, CameraController> controllers = {};
   Map<int, String> directions = {};
+  Map<int, bool> ocrBusy = {};
   bool isInitialized = false;
-  String? locationId;
-  String? modelId;
   bool detecting = false;
   bool disposing = false;
-  Map<int, bool> ocrBusy = {};
+  bool _initializing = false;
+
+  String? locationId;
+  String? modelId;
 
   Future<void> init(List<CameraDescription> cameras) async {
-    if (cameras.isEmpty) return;
-
-    final filteredCams = cameras.where((cam) {
-      return !cam.name.toLowerCase().contains('hp wide vision');
-    }).toList();
-
-    final camsToUse = filteredCams.length > 2
-        ? filteredCams.sublist(0, 2)
-        : filteredCams;
-
-    if (camsToUse.isEmpty) {
-      debugPrint('No external webcam found after filtering');
+    debugPrint("init()");
+    if (_initializing) {
+      debugPrint("⛔ init() skipped (already initializing)");
       return;
     }
+    _initializing = true;
 
-    // ปิดกล้องเก่าทั้งหมดก่อนสร้างใหม่
-    await disposeAllControllers();
+    try {
+      if (disposing) {
+        debugPrint("⏳ Waiting for disposing...");
+        while (disposing) {
+          await Future.delayed(const Duration(milliseconds: 50));
+        }
+      }
 
-    // สร้างกล้องใหม่และตั้ง direction
-    for (var i = 0; i < camsToUse.length; i++) {
-      final camera = camsToUse[i];
-      final controller = CameraController(camera, ResolutionPreset.medium);
-      await controller.initialize();
-      controllers[i] = controller;
+      detecting = false;
 
-      final dir = i == 0 ? 'in' : 'out';
-      directions[i] = dir;
+      await disposeAllControllers();
+      await Future.delayed(const Duration(milliseconds: 150));
 
-      debugPrint('Initialized camera $i ($dir): ${camera.name}');
+      if (cameras.isEmpty) return;
+
+      final filtered = cameras
+          .where((cam) => !cam.name.toLowerCase().contains('hp wide vision'))
+          .toList();
+
+      final camsToUse = filtered.length > 2 ? filtered.sublist(0, 2) : filtered;
+      if (camsToUse.isEmpty) {
+        debugPrint("No usable cameras");
+        return;
+      }
+
+      for (var i = 0; i < camsToUse.length; i++) {
+        final cam = camsToUse[i];
+
+        final ctrl = CameraController(
+          cam,
+          ResolutionPreset.medium,
+          enableAudio: false,
+        );
+        await ctrl.initialize();
+
+        controllers[i] = ctrl;
+        directions[i] = (i == 0 ? 'in' : 'out');
+        ocrBusy[i] = false;
+
+        debugPrint("✅ Camera $i (${directions[i]}) initialized: ${cam.name}");
+      }
+
+      isInitialized = true;
+      notifyListeners();
+    } finally {
+      _initializing = false;
     }
-
-    isInitialized = true;
-    notifyListeners();
   }
 
   void updateLocationAndModel({String? location, String? model}) {
@@ -57,125 +79,109 @@ class CameraManager extends ChangeNotifier {
   }
 
   void startDetection() {
-    if (!isInitialized || locationId == null || modelId == null) return;
+    if (!isInitialized) return;
+    if (locationId == null || modelId == null) return;
     if (detecting) return;
-    detecting = true;
+
+    debugPrint("🚦 startDetection()");
     disposing = false;
+    detecting = true;
     detectLoop();
   }
 
   Future<void> stopDetection() async {
+    if (disposing) return;
+
+    debugPrint("🛑 stopDetection()");
     detecting = false;
     disposing = true;
+
     await disposeAllControllers();
+
     disposing = false;
+    notifyListeners();
   }
 
   Future<void> disposeAllControllers() async {
-    for (var controller in controllers.values) {
+    for (final ctrl in controllers.values) {
       try {
-        if (controller.value.isInitialized) {
-          await controller.dispose();
-        }
-      } catch (e) {
-        debugPrint('⚠️ Error disposing controller: $e');
-      }
+        await ctrl.dispose();
+      } catch (_) {}
     }
+
     controllers.clear();
     directions.clear();
+    ocrBusy.clear();
+    isInitialized = false;
   }
 
   Future<void> detectLoop() async {
-    debugPrint('\n=== detectLoop STARTED ===');
+    debugPrint("🔄 detectLoop START");
 
     while (detecting && !disposing && locationId != null && modelId != null) {
-      for (var entry in controllers.entries) {
+      final camIds = controllers.keys.toList();
+      for (final index in camIds) {
         if (!detecting || disposing) break;
 
-        final index = entry.key;
-        final controller = entry.value;
+        final controller = controllers[index];
         final direction = directions[index];
 
+        if (controller == null || direction == null) continue;
+        if (!controller.value.isInitialized) continue;
+
         try {
-          if (!controller.value.isInitialized || disposing) continue;
+          final pic = await controller.takePicture();
+          final bytes = await pic.readAsBytes();
 
-          // ถ่ายรูปตรวจรถ
-          final image = await controller.takePicture();
-          final bytes = await image.readAsBytes();
-
-          debugPrint('📸 ตรวจจับรถ กล้อง $index ($direction)');
+          debugPrint("📸 detect car cam $index ($direction)");
           final result = await ApiService.detectVehicleFrom(bytes);
 
-          if (result == null || result['status'] != 'car_detected') {
-            debugPrint('❌ ไม่พบรถ (กล้อง $index)');
-            continue;
-          }
-          await Future.delayed(const Duration(milliseconds: 200));
+          if (result == null || result['status'] != 'car_detected') continue;
 
-          // ✅ กัน OCR ซ้อน (สำคัญที่สุด)
-          if (ocrBusy[index] == true) {
-            debugPrint('⏳ OCR ของกล้อง $index กำลังทำงาน → ข้าม');
-            continue;
-          }
+          await Future.delayed(const Duration(milliseconds: 800));
 
-          ocrBusy[index] = true; // ✅ ล็อกไว้ก่อนเริ่ม
-          debugPrint('🚗 พบรถที่กล้อง $index ($direction) → เริ่ม OCR');
+          if (ocrBusy[index] == true) continue;
 
-          unawaited(
-            runOCR(
-              controller: controller,
-              direction: direction!,
-              locationId: locationId!,
-              modelId: modelId!,
-              index: index,
-            ),
-          );
-
+          ocrBusy[index] = true;
+          unawaited(runOCR(index, direction, controller));
         } catch (e) {
-          if (e.toString().contains('Disposed CameraController')) {
-            debugPrint('⚠ กล้อง $index ถูก dispose → ข้าม');
-            continue;
-          }
-          debugPrint('❌ DetectLoop Error ($direction): $e');
+          if (e.toString().contains("Disposed CameraController")) continue;
+          debugPrint("❌ detectLoop error cam $index: $e");
         }
       }
     }
+
+    debugPrint("⏹ detectLoop EXIT");
   }
 
-  Future<void> runOCR({
-    required CameraController controller,
-    required String direction,
-    required String locationId,
-    required String modelId,
-    required int index,
-  }) async {
+  Future<void> runOCR(
+    int index,
+    String direction,
+    CameraController controller,
+  ) async {
     try {
-      await Future.delayed(const Duration(milliseconds: 800));
+      final shot = await controller.takePicture();
+      final bytes = await shot.readAsBytes();
 
-      final ocrImage = await controller.takePicture();
-      final ocrBytes = await ocrImage.readAsBytes();
-
-      debugPrint("🔍 ส่ง OCR ($direction)");
+      debugPrint("🔍 OCR ($direction)");
       await ApiService.detect_OCR(
-        ocrBytes,
-        locationId: locationId,
-        modelId: modelId,
+        bytes,
+        locationId: locationId!,
+        modelId: modelId!,
         direction: direction,
       );
-      debugPrint("✅ OCR สำเร็จ ($direction)");
+
+      debugPrint("✅ OCR Done ($direction)");
     } catch (e) {
       debugPrint("❌ OCR Error ($direction): $e");
     } finally {
-      ocrBusy[index] = false; 
+      ocrBusy[index] = false;
     }
   }
 
   @override
   Future<void> dispose() async {
-    detecting = false;
-    disposing = true;
-    await disposeAllControllers();
-    disposing = false;
+    await stopDetection();
     super.dispose();
   }
 }

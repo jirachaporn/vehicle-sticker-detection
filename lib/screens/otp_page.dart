@@ -173,6 +173,7 @@ class _OTPPageState extends State<OTPPage> {
         });
         return;
       }
+
       bool success = false;
       if (widget.type == 'signup') {
         final res = await ApiService.verifySignupOtp(widget.email, enteredOtp);
@@ -192,22 +193,19 @@ class _OTPPageState extends State<OTPPage> {
             ),
           );
         } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const SignInPage()),
-          );
+
+          Navigator.pop(context, true);
         }
       } else {
         setState(() => isOtpIncorrect = true);
-        showFailMessage(context,'OTP Failed', 'Invalid or expired OTP.');
+        showFailMessage(context, 'OTP Failed', 'Invalid or expired OTP.');
       }
     } catch (e) {
-      showFailMessage(context,'Error', 'Verification failed');
+      showFailMessage(context, 'Error', 'Verification failed');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
   }
-
 
   // ===== Widget หลัก =====
   @override

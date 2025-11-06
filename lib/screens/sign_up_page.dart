@@ -72,6 +72,7 @@ class _SignUpPageState extends State<SignUpPage> {
       // เช็คอีเมลซ้ำ
       await checkEmailExists(email);
       if (isEmailTaken) {
+        if (!mounted) return; // ตรวจสอบก่อนเรียก setState
         showFailMessage(context, 'Email Error', 'Email already registered');
         return;
       }
@@ -79,6 +80,7 @@ class _SignUpPageState extends State<SignUpPage> {
       // ส่ง OTP
       final otpRes = await ApiService.sendSignupOtp(email);
       if (otpRes['success'] != true) {
+        if (!mounted) return; // ตรวจสอบก่อนเรียก setState
         showFailMessage(
           context,
           'OTP Error',
@@ -87,19 +89,32 @@ class _SignUpPageState extends State<SignUpPage> {
         return;
       }
 
-      await Navigator.push<String>(
+      // ✅ รอผลลัพธ์จาก OTPPage
+      final otpVerified = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
           builder: (_) => OTPPage(email: email, type: 'signup'),
         ),
       );
 
+      debugPrint('🔍 OTP Verified Result: $otpVerified');
+
+      // ✅ ถ้า OTP ไม่ valid หรือ user กด back → หยุดทันที
+      if (otpVerified != true) {
+        if (!mounted) return; // ตรวจสอบก่อนเรียก setState
+        debugPrint('❌ OTP verification failed or cancelled');
+        setState(() => isLoading = false);
+        return;
+      }
+
+      debugPrint('✅ OTP verified! Proceeding to insert data...');
+
+      // ✅ ถ้า verify สำเร็จ → ค่อย insert ข้อมูล
       final supabase = Supabase.instance.client;
       final passwordHash = sha256.convert(utf8.encode(password)).toString();
       final colors = ['#4285F4', '#EA4335', '#FBBC05', '#34A853', '#AB47BC'];
       final color = colors[Random().nextInt(colors.length)];
 
-      // สร้าง UUID เดียวใช้สำหรับทั้งสองตาราง
       final newUserId = const Uuid().v4();
       final nowThai = DateTime.now().toUtc().add(const Duration(hours: 7));
 
@@ -122,7 +137,7 @@ class _SignUpPageState extends State<SignUpPage> {
         'user_role': 'user',
       });
 
-      if (!mounted) return;
+      if (!mounted) return; // ตรวจสอบก่อนเรียก setState
 
       // ไปหน้า sign in พร้อมแสดงข้อความสำเร็จ
       Navigator.pushReplacement(
@@ -130,10 +145,16 @@ class _SignUpPageState extends State<SignUpPage> {
         MaterialPageRoute(builder: (_) => const SignInPage()),
       );
 
-      showSuccessMessage(context,'Signup Successful');
+      showSuccessMessage(context, 'Signup Successful');
     } catch (e) {
       debugPrint('❌ Signup failed: $e');
-      showFailMessage(context, 'Signup Failed', 'Please try to sign up again.');
+      if (mounted) {
+        showFailMessage(
+          context,
+          'Signup Failed',
+          'Please try to sign up again.',
+        );
+      }
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -195,7 +216,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       validator: (v) {
                         final s = (v ?? '').trim();
                         if (s.isEmpty) return 'Please enter a username';
-                        if (s.length < 3) return 'At least 3 characters';
+                        if (s.length < 5) return 'At least 5 characters';
                         return null;
                       },
                     ),
